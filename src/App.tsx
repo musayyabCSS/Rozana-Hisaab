@@ -184,13 +184,16 @@ function App() {
         </div>
       )}
       {/* Auth Status Banner added for user switching */}
-      <div className="bg-slate-900 border-b border-slate-800 px-4 py-2 flex justify-between items-center text-xs">
-        <span className="text-slate-400">
-          {language === 'en' ? 'Logged in as:' : 'لاگ ان:'} <strong className="text-slate-200">{session.user.email}</strong>
+      <div className="sticky top-0 z-50 flex items-center justify-between gap-3 border-b border-slate-800 bg-slate-900 px-4 pb-2 pt-[max(env(safe-area-inset-top,0px),1rem)] text-xs">
+        <span className="min-w-0 flex-1 truncate text-slate-400">
+          {language === 'en' ? 'Logged in as:' : 'لاگ ان:'}{' '}
+          <strong className="inline-block max-w-[55vw] truncate align-bottom text-slate-200">
+            {session.user.email}
+          </strong>
         </span>
         <button
           onClick={handleLogout}
-          className="text-red-400 hover:text-red-300 hover:bg-red-500/10 px-2 py-1 rounded transition"
+          className="relative z-50 min-h-9 shrink-0 rounded px-3 py-1.5 text-red-400 transition hover:bg-red-500/10 hover:text-red-300"
         >
           {language === 'en' ? 'Log Out' : 'لاگ آؤٹ'}
         </button>
