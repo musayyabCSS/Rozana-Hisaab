@@ -5,9 +5,7 @@ import { CATEGORIES, EXPENSE_CATEGORIES, getCategoryLabel, INCOME_CATEGORIES } f
 import { tr } from '@/lib/i18n';
 import { saveReceiptImage } from '@/lib/receiptStorage';
 import { isFutureDate } from '@/lib/format';
-
-const OPENAI_API_KEY = import.meta.env.VITE_OPENAI_API_KEY as string | undefined;
-const OPENAI_VISION_ENDPOINT = 'https://api.openai.com/v1/chat/completions';
+import { supabase } from '@/lib/supabase';
 
 interface ScanModalProps {
   open: boolean;
@@ -117,7 +115,6 @@ export function ScanModal({ open, onClose, language, dir, onSave }: ScanModalPro
   const [transactionDateCustomized, setTransactionDateCustomized] = useState(false);
   const [step, setStep] = useState<'capture' | 'review'>('capture');
 
-  // Form state for review step
   const [extractedData, setExtractedData] = useState<ExtractedBillData>({
     title: '',
     amount: 0,
@@ -146,7 +143,6 @@ export function ScanModal({ open, onClose, language, dir, onSave }: ScanModalPro
     });
   };
 
-  // Stop camera tracks cleanly
   const stopCamera = useCallback(() => {
     if (streamRef.current) {
       streamRef.current.getTracks().forEach((track) => {
@@ -156,9 +152,8 @@ export function ScanModal({ open, onClose, language, dir, onSave }: ScanModalPro
     }
   }, []);
 
-  // Start camera hardware
   const startCamera = useCallback(async () => {
-    stopCamera(); // Ensure previous streams are released
+    stopCamera();
     setCameraError(null);
 
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
@@ -179,9 +174,7 @@ export function ScanModal({ open, onClose, language, dir, onSave }: ScanModalPro
 
       if (videoRef.current) {
         videoRef.current.srcObject = mediaStream;
-        await videoRef.current.play().catch(() => {
-          // Video auto-play handled gracefully
-        });
+        await videoRef.current.play().catch(() => {});
       }
     } catch (err: unknown) {
       console.error(
@@ -192,7 +185,6 @@ export function ScanModal({ open, onClose, language, dir, onSave }: ScanModalPro
     }
   }, [stopCamera]);
 
-  // Handle modal visibility and camera lifecycle
   useEffect(() => {
     if (open && step === 'capture' && !capturedImage) {
       startCamera();
@@ -205,7 +197,6 @@ export function ScanModal({ open, onClose, language, dir, onSave }: ScanModalPro
     };
   }, [open, step, capturedImage, startCamera, stopCamera]);
 
-  // Capture photo frame from stream
   const handleCapturePhoto = () => {
     if (!videoRef.current) return;
 
@@ -224,7 +215,6 @@ export function ScanModal({ open, onClose, language, dir, onSave }: ScanModalPro
     }
   };
 
-  // Handle gallery file selection
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
@@ -239,7 +229,6 @@ export function ScanModal({ open, onClose, language, dir, onSave }: ScanModalPro
     }
   };
 
-  // Retake photo logic
   const handleRetake = async () => {
     stopCamera();
     setCapturedImage(null);
@@ -254,60 +243,24 @@ export function ScanModal({ open, onClose, language, dir, onSave }: ScanModalPro
     setOcrError(null);
     setTransactionDateCustomized(false);
     try {
-      if (!OPENAI_API_KEY) {
-        throw new Error('Missing VITE_OPENAI_API_KEY.');
-      }
-
-      const response = await fetch(OPENAI_VISION_ENDPOINT, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${OPENAI_API_KEY}`,
-          'Content-Type': 'application/json',
+      const { data, error } = await supabase.functions.invoke('ai-proxy', {
+        body: {
+          action: 'receipt',
+          imageBase64: imageData,
         },
-        body: JSON.stringify({
-          model: 'gpt-4o-mini',
-          response_format: { type: 'json_object' },
-          messages: [
-            {
-              role: 'user',
-              content: [
-                {
-                  type: 'text',
-                  text: `Analyze this receipt or bill image. Return a JSON object with these exact keys:
-- title: for an incoming payment from an individual/client, use the person's/client's name (not generic text such as "Payment Received"). For a utility bill, use the provider name (such as LESCO or PTCL). Otherwise use a concise transaction title.
-- amount: numeric amount in PKR, or 0 if not found
-- type: use "income" when money is received, deposited, or paid to a person/client; otherwise "expense"
-- category: for incoming client/individual payments always use "freelance". For other income choose salary, business, freelance, rental_income, commission, loan, or scholarship. For expenses choose fuel, bills, groceries, medical, udhaar, rent, school_fee, mechanic, or misc_expense.
-- vendor: for incoming payments, extract the client's/person's name (not generic labels); for expenses, extract the merchant name; or empty string if not visible
-- provider: service/provider name, or empty string
-- due_date: date in YYYY-MM-DD format; convert dates such as "03-OCT-2026" to "2026-10-03", or use empty string if no date is visible
-- units_consumed: quantity/units shown, or empty string
-- consumer_number: account/consumer reference if shown, or empty string
-- description: brief summary of the receipt`,
-                },
-                {
-                  type: 'image_url',
-                  image_url: { url: imageData },
-                },
-              ],
-            },
-          ],
-        }),
       });
 
-      const result = (await response.json()) as {
-        choices?: Array<{ message?: { content?: string | null } }>;
-        error?: { message?: string };
-      };
-      if (!response.ok) {
-        throw new Error(
-          result.error?.message || `OpenAI Vision request failed (${response.status}).`,
-        );
+      if (error) {
+        throw new Error(error.message);
       }
 
-      const content = result.choices?.[0]?.message?.content;
+      if (data?.error) {
+        throw new Error(data.error.message || data.error);
+      }
+
+      const content = data?.choices?.[0]?.message?.content;
       if (!content) {
-        throw new Error('OpenAI Vision returned an empty response.');
+        throw new Error('AI Vision returned an empty response.');
       }
 
       const parsed = JSON.parse(content) as Record<string, unknown>;
@@ -365,7 +318,7 @@ export function ScanModal({ open, onClose, language, dir, onSave }: ScanModalPro
     } catch (error) {
       const message =
         error instanceof Error ? error.message : 'Unknown error during receipt analysis.';
-      console.error('OpenAI Vision error:', message);
+      console.error('AI Proxy OCR error:', message);
       setOcrError(message);
     } finally {
       setIsProcessing(false);
@@ -373,7 +326,6 @@ export function ScanModal({ open, onClose, language, dir, onSave }: ScanModalPro
     }
   };
 
-  // Save transaction to Supabase
   const handleSaveTransaction = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isSaving) return;
@@ -421,7 +373,6 @@ export function ScanModal({ open, onClose, language, dir, onSave }: ScanModalPro
     setCameraError(null);
     setOcrError(null);
     setTransactionDateCustomized(false);
-    setTransactionDateCustomized(false);
     setStep('capture');
     setIsProcessing(false);
     setIsSaving(false);
@@ -438,7 +389,6 @@ export function ScanModal({ open, onClose, language, dir, onSave }: ScanModalPro
       dir={dir}
     >
       <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-md p-5 space-y-4 shadow-2xl relative my-8">
-        {/* Header */}
         <div className="flex justify-between items-center border-b border-slate-800 pb-3">
           <div>
             <h3 className="text-lg font-bold text-white">
@@ -462,7 +412,6 @@ export function ScanModal({ open, onClose, language, dir, onSave }: ScanModalPro
           </button>
         </div>
 
-        {/* Hidden File Input */}
         <input
           ref={fileInputRef}
           type="file"
@@ -471,7 +420,6 @@ export function ScanModal({ open, onClose, language, dir, onSave }: ScanModalPro
           className="hidden"
         />
 
-        {/* STEP 1: CAPTURE & CAMERA VIEW */}
         {step === 'capture' && (
           <div className="space-y-4">
             {cameraError && (
@@ -529,7 +477,6 @@ export function ScanModal({ open, onClose, language, dir, onSave }: ScanModalPro
           </div>
         )}
 
-        {/* STEP 2: REVIEW & EDIT EXTRACTED DETAILS */}
         {step === 'review' && (
           <form onSubmit={handleSaveTransaction} className="space-y-3 text-xs">
             <div className="flex gap-1.5 bg-slate-950/60 rounded-2xl p-1.5">
@@ -658,15 +605,13 @@ export function ScanModal({ open, onClose, language, dir, onSave }: ScanModalPro
                 <input
                   type="date"
                   value={extractedData.transaction_date}
-                  onChange={(e) =>
-                    {
-                      setTransactionDateCustomized(true);
-                      setExtractedData({
-                        ...extractedData,
-                        transaction_date: e.target.value,
-                      });
-                    }
-                  }
+                  onChange={(e) => {
+                    setTransactionDateCustomized(true);
+                    setExtractedData({
+                      ...extractedData,
+                      transaction_date: e.target.value,
+                    });
+                  }}
                   className="w-full p-2.5 bg-slate-800 text-white rounded-lg border border-slate-700 focus:outline-none focus:border-emerald-500"
                   required
                 />
@@ -676,18 +621,16 @@ export function ScanModal({ open, onClose, language, dir, onSave }: ScanModalPro
                 <input
                   type="date"
                   value={extractedData.due_date}
-                  onChange={(e) =>
-                    {
-                      const dueDate = e.target.value;
-                      setExtractedData({
-                        ...extractedData,
-                        due_date: dueDate,
-                        ...(transactionDateCustomized
-                          ? {}
-                          : { transaction_date: dueDate || new Date().toISOString().split('T')[0] }),
-                      });
-                    }
-                  }
+                  onChange={(e) => {
+                    const dueDate = e.target.value;
+                    setExtractedData({
+                      ...extractedData,
+                      due_date: dueDate,
+                      ...(transactionDateCustomized
+                        ? {}
+                        : { transaction_date: dueDate || new Date().toISOString().split('T')[0] }),
+                    });
+                  }}
                   className="w-full p-2.5 bg-slate-800 text-white rounded-lg border border-slate-700 focus:outline-none focus:border-emerald-500"
                 />
               </div>
