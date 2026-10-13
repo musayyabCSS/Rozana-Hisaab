@@ -292,57 +292,32 @@ export function TransactionFeed({
                   return (
                     <div
                       key={txn.id}
-                      className="group flex items-center gap-3 rounded-2xl bg-slate-950/40 border border-slate-800/50 p-3 hover:border-slate-700 transition-all"
+                      dir={dir}
+                      className="group flex flex-col gap-2 rounded-2xl bg-slate-950/40 border border-slate-800/50 p-3 hover:border-slate-700 transition-all"
                     >
-                        <div
-                          className={`shrink-0 w-10 h-10 rounded-xl flex items-center justify-center text-lg ${
-                            isIncome ? 'bg-emerald-500/15' : 'bg-rose-500/15'
-                          }`}
-                        >
-                          {getCategoryEmoji(txn.category)}
-                        </div>
-
-                        <div
-                          className={`flex-1 min-w-0 ${dir === 'rtl' ? 'text-right' : 'text-left'}`}
-                        >
-                          <p className="text-slate-100 text-sm font-medium truncate">
-                            {txn.title}
-                          </p>
+                      <div className="flex min-w-0 items-center justify-between gap-3">
+                        <div className="flex min-w-0 flex-1 items-center gap-3">
                           <div
-                            className={`flex items-center gap-2 mt-0.5 ${
-                              dir === 'rtl' ? 'flex-row-reverse' : ''
+                            className={`shrink-0 w-10 h-10 rounded-xl flex items-center justify-center text-lg ${
+                              isIncome ? 'bg-emerald-500/15' : 'bg-rose-500/15'
                             }`}
                           >
-                            <span
-                              className={`text-[10px] px-1.5 py-0.5 rounded-md font-medium ${
-                                isIncome
-                                  ? 'bg-emerald-500/10 text-emerald-400'
-                                  : 'bg-rose-500/10 text-rose-400'
-                              }`}
-                            >
-                              {getCategoryLabel(txn.category, language)}
-                            </span>
-                            <span
-                              className={`text-[10px] ${
-                                isScheduled ? 'text-amber-400 font-medium' : 'text-slate-500'
-                              }`}
-                            >
-                              {getRelativeDate(txn.transaction_date, language)}
-                            </span>
-                            {isScheduled && (
-                              <span className="text-[9px] px-1.5 py-0.5 rounded-md bg-amber-500/10 text-amber-400 font-medium">
-                                {language === 'ur' ? 'غیر ادا شدہ' : 'Scheduled'}
-                              </span>
-                            )}
+                            {getCategoryEmoji(txn.category)}
+                          </div>
+                          <div
+                            className={`min-w-0 flex-1 ${
+                              dir === 'rtl' ? 'text-right' : 'text-left'
+                            }`}
+                          >
+                            <p className="truncate text-slate-100 text-sm font-medium">
+                              {txn.title}
+                            </p>
                           </div>
                         </div>
 
-                        <div
-                          className={`shrink-0 text-right ${
-                            dir === 'rtl' ? 'text-left' : 'text-right'
-                          }`}
-                        >
+                        <div className="shrink-0 text-right">
                           <p
+                            dir="ltr"
                             className={`font-bold text-sm tabular-nums ${
                               isIncome ? 'text-emerald-400' : 'text-rose-400'
                             }`}
@@ -350,8 +325,36 @@ export function TransactionFeed({
                             {isIncome ? '+' : '−'} {formatPKR(Number(txn.amount))}
                           </p>
                         </div>
+                      </div>
 
-                        <div className="shrink-0 flex items-center gap-1">
+                      <div className="flex min-w-0 flex-wrap items-center justify-between gap-x-3 gap-y-2">
+                        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">
+                          <span
+                            className={`max-w-full rounded-md px-1.5 py-0.5 text-[10px] font-medium ${
+                              isIncome
+                                ? 'bg-emerald-500/10 text-emerald-400'
+                                : 'bg-rose-500/10 text-rose-400'
+                            }`}
+                          >
+                            {getCategoryLabel(txn.category, language)}
+                          </span>
+                          <span
+                            className={`rounded-md px-1.5 py-0.5 text-[10px] ${
+                              isScheduled
+                                ? 'bg-amber-500/10 text-amber-400 font-medium'
+                                : 'bg-slate-800 text-slate-500'
+                            }`}
+                          >
+                            {getRelativeDate(txn.transaction_date, language)}
+                          </span>
+                          {isScheduled && (
+                            <span className="rounded-md bg-amber-500/10 px-1.5 py-0.5 text-[9px] font-medium text-amber-400">
+                              {language === 'ur' ? 'غیر ادا شدہ' : 'Scheduled'}
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="flex shrink-0 items-center gap-1">
                           {isScheduled && (
                             <button
                               type="button"
@@ -360,7 +363,7 @@ export function TransactionFeed({
                                 setPaymentDate(toLocalDateKey(new Date()));
                                 setPaymentError(null);
                               }}
-                              className="flex items-center gap-1 rounded-lg px-2 py-1.5 text-[10px] font-semibold text-amber-300 bg-amber-500/10 hover:bg-amber-500/20"
+                              className="flex items-center gap-1 rounded-lg bg-amber-500/10 px-2 py-1.5 text-[10px] font-semibold text-amber-300 hover:bg-amber-500/20"
                             >
                               <Check size={13} />
                               {isIncome
@@ -376,7 +379,7 @@ export function TransactionFeed({
                             <button
                               type="button"
                               onClick={() => void showReceipt(txn.id)}
-                              className="p-1.5 rounded-lg text-slate-500 hover:text-sky-400 hover:bg-sky-500/10"
+                              className="rounded-lg p-1.5 text-slate-500 hover:bg-sky-500/10 hover:text-sky-400"
                               aria-label={language === 'ur' ? 'رسید دیکھیں' : 'View receipt'}
                             >
                               <Camera size={15} />
@@ -385,7 +388,7 @@ export function TransactionFeed({
                           <button
                             type="button"
                             onClick={() => onEdit(txn)}
-                            className="p-1.5 rounded-lg text-slate-500 hover:text-emerald-400 hover:bg-emerald-500/10"
+                            className="rounded-lg p-1.5 text-slate-500 hover:bg-emerald-500/10 hover:text-emerald-400"
                             aria-label={language === 'ur' ? 'ترمیم' : 'Edit transaction'}
                           >
                             <Pencil size={14} />
@@ -393,13 +396,14 @@ export function TransactionFeed({
                           <button
                             type="button"
                             onClick={() => onDelete(txn.id)}
-                            className="p-1.5 rounded-lg text-slate-600 hover:text-rose-400 hover:bg-rose-500/10"
+                            className="rounded-lg p-1.5 text-slate-600 hover:bg-rose-500/10 hover:text-rose-400"
                             aria-label={tr('delete', language)}
                           >
                             <Trash2 size={15} />
                           </button>
                         </div>
                       </div>
+                    </div>
                     );
                   })}
                 </div>
