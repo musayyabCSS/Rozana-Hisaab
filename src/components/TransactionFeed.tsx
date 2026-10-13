@@ -327,10 +327,10 @@ export function TransactionFeed({
                         </div>
                       </div>
 
-                      <div className="flex min-w-0 flex-wrap items-center justify-between gap-x-3 gap-y-2">
-                        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">
+                      <div className="flex min-w-0 items-center justify-between gap-2">
+                        <div className="flex min-w-0 flex-1 items-center gap-1.5 overflow-hidden">
                           <span
-                            className={`max-w-full rounded-md px-1.5 py-0.5 text-[10px] font-medium ${
+                            className={`min-w-0 truncate rounded-md px-1.5 py-0.5 text-[10px] font-medium ${
                               isIncome
                                 ? 'bg-emerald-500/10 text-emerald-400'
                                 : 'bg-rose-500/10 text-rose-400'
@@ -339,7 +339,7 @@ export function TransactionFeed({
                             {getCategoryLabel(txn.category, language)}
                           </span>
                           <span
-                            className={`rounded-md px-1.5 py-0.5 text-[10px] ${
+                            className={`shrink-0 whitespace-nowrap rounded-md px-1.5 py-0.5 text-[10px] ${
                               isScheduled
                                 ? 'bg-amber-500/10 text-amber-400 font-medium'
                                 : 'bg-slate-800 text-slate-500'
@@ -348,7 +348,7 @@ export function TransactionFeed({
                             {getRelativeDate(txn.transaction_date, language)}
                           </span>
                           {isScheduled && (
-                            <span className="rounded-md bg-amber-500/10 px-1.5 py-0.5 text-[9px] font-medium text-amber-400">
+                            <span className="hidden shrink-0 whitespace-nowrap rounded-md bg-amber-500/10 px-1.5 py-0.5 text-[9px] font-medium text-amber-400 sm:inline-flex">
                               {language === 'ur' ? 'غیر ادا شدہ' : 'Scheduled'}
                             </span>
                           )}
@@ -363,7 +363,7 @@ export function TransactionFeed({
                                 setPaymentDate(toLocalDateKey(new Date()));
                                 setPaymentError(null);
                               }}
-                              className="flex items-center gap-1 rounded-lg bg-amber-500/10 px-2 py-1.5 text-[10px] font-semibold text-amber-300 hover:bg-amber-500/20"
+                              className="flex shrink-0 items-center gap-1 whitespace-nowrap rounded-lg bg-amber-500/10 px-2 py-1.5 text-[10px] font-semibold text-amber-300 hover:bg-amber-500/20"
                             >
                               <Check size={13} />
                               {isIncome
