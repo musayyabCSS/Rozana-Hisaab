@@ -117,10 +117,11 @@ Return strictly valid JSON with this exact schema:
 - title: for an incoming payment from an individual/client, use the person's/client's name (not generic text such as "Payment Received"). For a utility bill, use the provider name (such as LESCO or PTCL). Otherwise use a concise transaction title.
 - amount: numeric amount in PKR, or 0 if not found
 - type: use "income" when money is received, deposited, or paid to a person/client; otherwise "expense"
-- category: for incoming client/individual payments always use "freelance". For other income choose salary, business, freelance, rental_income, commission, loan, or scholarship. For expenses choose fuel, bills, groceries, medical, udhaar, rent, school_fee, mechanic, or misc_expense.
+- category: for vehicle maintenance, car repair, parts, labour, periodic maintenance, workshop, or mechanic invoices, strictly use "mechanic". For incoming client payments use "freelance". For other transactions, choose exactly one of "salary", "business", "rental_income", "commission", "loan", "scholarship", "fuel", "bills", "groceries", "medical", "udhaar", "rent", "school_fee", or "misc_expense".
 - vendor: for incoming payments, extract the client's/person's name (not generic labels); for expenses, extract the merchant name; or empty string if not visible
 - provider: service/provider name, or empty string
-- due_date: date in YYYY-MM-DD format; convert dates such as "03-OCT-2026" to "2026-10-03", or use empty string if no date is visible
+- transaction_date: the printed or stamped invoice/receipt date in YYYY-MM-DD format (for example, "2026-08-09"). Never omit this if a date appears on the paper. Convert dates such as "09-AUG-2026" to "2026-08-09".
+- due_date: only for utility bills or scheduled bills with an explicit due date, in YYYY-MM-DD format; otherwise use an empty string
 - units_consumed: quantity/units shown, or empty string
 - consumer_number: account/consumer reference if shown, or empty string
 - description: brief summary of the receipt`

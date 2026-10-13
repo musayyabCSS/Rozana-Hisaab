@@ -31,7 +31,28 @@ interface ExtractedBillData {
 
 function mapCategory(value: unknown): Category {
   if (typeof value !== 'string') return 'misc_expense';
-  const normalized = value.toLowerCase().trim().replace(/[_-]/g, ' ');
+  const normalized = value.toLowerCase().trim().replace(/[_-]/g, ' ').replace(/\s+/g, ' ');
+  const mechanicSynonyms = [
+    'mechanic',
+    'maintenance',
+    'car repair',
+    'car maintenance',
+    'workshop',
+    'vehicle',
+    'auto',
+    'automotive',
+    'labour',
+    'spare parts',
+    'parts',
+    'oil change',
+    'labour & parts',
+    'periodic maintenance',
+    'engine oil',
+  ];
+  if (mechanicSynonyms.some((synonym) => normalized.includes(synonym))) {
+    return 'mechanic';
+  }
+
   const categories: Record<string, Category> = {
     salary: 'salary',
     business: 'business',
@@ -51,7 +72,6 @@ function mapCategory(value: unknown): Category {
     udhaar: 'udhaar',
     rent: 'rent',
     'school fee': 'school_fee',
-    mechanic: 'mechanic',
     'misc expense': 'misc_expense',
     'misc. expense': 'misc_expense',
   };
@@ -295,9 +315,19 @@ export function ScanModal({ open, onClose, language, dir, onSave }: ScanModalPro
           ? vendor || (genericIncomeTitle.test(modelTitle) ? 'Freelance Income' : modelTitle)
           : modelTitle || 'Scanned Receipt';
 
-      const dueDate = normalizeReceiptDate(parsed.due_date);
+      const transactionDate =
+        [parsed.transaction_date, parsed.date, parsed.due_date]
+          .map(normalizeReceiptDate)
+          .find(Boolean) || '';
       const today = new Date().toISOString().split('T')[0];
-      const transactionDate = dueDate && isFutureDate(dueDate) ? dueDate : today;
+      const resolvedTransactionDate = transactionDate || today;
+      const parsedDueDate = normalizeReceiptDate(parsed.due_date);
+      const dueDate =
+        parsedDueDate &&
+        parsedDueDate !== resolvedTransactionDate &&
+        isFutureDate(parsedDueDate)
+          ? parsedDueDate
+          : resolvedTransactionDate;
 
       setExtractedData({
         title,
@@ -307,7 +337,7 @@ export function ScanModal({ open, onClose, language, dir, onSave }: ScanModalPro
         vendor,
         provider: provider || (utilityBill ? vendor : ''),
         due_date: dueDate,
-        transaction_date: transactionDate,
+        transaction_date: resolvedTransactionDate,
         units_consumed:
           typeof parsed.units_consumed === 'string' ? parsed.units_consumed : '',
         consumer_number:
