@@ -1,0 +1,20 @@
+{
+  "name": "Rozana Hisaab - روزانہ حساب",
+  "short_name": "Rozana Hisaab",
+  "description": "Bilingual Pakistani personal expense tracker and budgeting tool",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#020617",
+  "theme_color": "#020617",
+  "orientation": "portrait",
+  "lang": "en",
+  "dir": "ltr",
+  "icons": [
+    {
+      "src": "/vite.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
