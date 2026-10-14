@@ -170,7 +170,7 @@ export function TransactionFeed({
     <div
       className={
         showAll
-          ? 'fixed inset-0 z-40 overflow-y-auto bg-slate-950 p-4 sm:p-6'
+          ? 'fixed inset-0 z-40 overflow-y-auto bg-slate-950 px-4 pb-4 pt-[max(env(safe-area-inset-top,0px),1rem)] sm:px-6 sm:pb-6'
           : 'rounded-3xl bg-slate-900 border border-slate-800 p-4'
       }
     >

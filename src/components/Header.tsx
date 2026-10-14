@@ -1,5 +1,5 @@
 import { useRef } from 'react';
-import { Languages, Camera, FileUp } from 'lucide-react';
+import { Languages, Camera, FileUp, LogOut } from 'lucide-react';
 import type { Language } from '@/types';
 import { tr } from '@/lib/i18n';
 import type { UserProfile } from '@/hooks/useProfile';
@@ -11,6 +11,7 @@ interface HeaderProps {
   profile: UserProfile | null;
   onAvatarChange: (avatar: string) => void;
   onImportBank: () => void;
+  onLogout: () => void;
 }
 
 function getInitials(name: string, lang: Language): string {
@@ -22,7 +23,15 @@ function getInitials(name: string, lang: Language): string {
   return parts[0]?.slice(0, 2).toUpperCase() ?? '?';
 }
 
-export function Header({ language, onToggleLanguage, dir, profile, onAvatarChange, onImportBank }: HeaderProps) {
+export function Header({
+  language,
+  onToggleLanguage,
+  dir,
+  profile,
+  onAvatarChange,
+  onImportBank,
+  onLogout,
+}: HeaderProps) {
   const fileRef = useRef<HTMLInputElement>(null);
   const displayName = profile?.name ?? tr('userName', language);
   const initials = profile ? getInitials(profile.name, language) : language === 'ur' ? 'م' : 'MH';
@@ -40,8 +49,8 @@ export function Header({ language, onToggleLanguage, dir, profile, onAvatarChang
 
   return (
     <header className="sticky top-0 z-30 bg-slate-950/80 backdrop-blur-xl border-b border-slate-800/50">
-      <div className="max-w-md mx-auto px-4 pt-7 pb-3 flex items-center justify-between">
-        <div className={`flex items-center gap-3 ${dir === 'rtl' ? 'flex-row-reverse' : ''}`}>
+      <div className="max-w-md mx-auto px-4 pt-[max(env(safe-area-inset-top,0px),1rem)] pb-3 flex items-center justify-between gap-2">
+        <div className={`flex min-w-0 items-center gap-3 ${dir === 'rtl' ? 'flex-row-reverse' : ''}`}>
           <input
             ref={fileRef}
             type="file"
@@ -67,15 +76,15 @@ export function Header({ language, onToggleLanguage, dir, profile, onAvatarChang
               <Camera size={9} className="text-slate-400 group-hover:text-white transition-colors" />
             </div>
           </button>
-          <div className={dir === 'rtl' ? 'text-right' : 'text-left'}>
-            <p className="text-slate-400 text-xs leading-tight">{displayName}</p>
+          <div className={`min-w-0 ${dir === 'rtl' ? 'text-right' : 'text-left'}`}>
+            <p className="truncate text-slate-400 text-xs leading-tight">{displayName}</p>
             <h1 className="text-slate-100 font-bold text-base leading-tight tracking-tight">
               {tr('appName', language)}
             </h1>
           </div>
         </div>
 
-        <div className={`flex items-center gap-2 ${dir === 'rtl' ? 'flex-row-reverse' : ''}`}>
+        <div className={`flex shrink-0 items-center gap-1.5 ${dir === 'rtl' ? 'flex-row-reverse' : ''}`}>
           <button
             onClick={onImportBank}
             className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 transition-all active:scale-95 text-emerald-400"
@@ -93,6 +102,15 @@ export function Header({ language, onToggleLanguage, dir, profile, onAvatarChang
             <span className="text-xs font-semibold">
               {language === 'en' ? 'EN / اردو' : 'اردو / EN'}
             </span>
+          </button>
+          <button
+            type="button"
+            onClick={onLogout}
+            className="flex h-9 w-9 items-center justify-center rounded-xl text-red-400 transition hover:bg-red-500/10 hover:text-red-300 active:scale-95"
+            aria-label={language === 'ur' ? 'لاگ آؤٹ' : 'Log Out'}
+            title={language === 'ur' ? 'لاگ آؤٹ' : 'Log Out'}
+          >
+            <LogOut size={16} />
           </button>
         </div>
       </div>

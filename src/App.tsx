@@ -183,22 +183,6 @@ function App() {
           Password updated successfully.
         </div>
       )}
-      {/* Auth Status Banner added for user switching */}
-      <div className="sticky top-0 z-50 flex items-center justify-between gap-3 border-b border-slate-800 bg-slate-900 px-4 pb-2 pt-[max(env(safe-area-inset-top,0px),1rem)] text-xs">
-        <span className="min-w-0 flex-1 truncate text-slate-400">
-          {language === 'en' ? 'Logged in as:' : 'لاگ ان:'}{' '}
-          <strong className="inline-block max-w-[55vw] truncate align-bottom text-slate-200">
-            {session.user.email}
-          </strong>
-        </span>
-        <button
-          onClick={handleLogout}
-          className="relative z-50 min-h-9 shrink-0 rounded px-3 py-1.5 text-red-400 transition hover:bg-red-500/10 hover:text-red-300"
-        >
-          {language === 'en' ? 'Log Out' : 'لاگ آؤٹ'}
-        </button>
-      </div>
-
       <Header
         language={language}
         onToggleLanguage={toggleLanguage}
@@ -206,6 +190,7 @@ function App() {
         profile={profile}
         onAvatarChange={(avatar) => updateProfile({ avatar })}
         onImportBank={() => setActiveModal('bank')}
+        onLogout={handleLogout}
       />
 
       <main className="max-w-md mx-auto px-4 py-5 pb-32 space-y-4">
