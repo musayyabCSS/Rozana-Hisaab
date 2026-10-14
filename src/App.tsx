@@ -38,8 +38,6 @@ function App() {
     profile,
     onboarded,
     loading: loadingProfile,
-    profileResolved,
-    profileLoadError,
     saveProfile,
     updateProfile,
     refetchProfile,
@@ -191,23 +189,6 @@ function App() {
     return (
       <div className="min-h-[100dvh] bg-[#0b0f19] pb-[env(safe-area-inset-bottom,0px)] text-slate-100 flex items-center justify-center animate-pulse">
         Loading Rozana Hisaab...
-      </div>
-    );
-  }
-
-  if (!profileResolved) {
-    return (
-      <div className="flex min-h-[100dvh] flex-col items-center justify-center gap-4 bg-[#0b0f19] px-4 pb-[env(safe-area-inset-bottom,0px)] text-slate-100">
-        <p className="text-center text-sm text-slate-300">
-          {profileLoadError ?? 'Your profile is not available yet. Check your connection and try again.'}
-        </p>
-        <button
-          type="button"
-          onClick={refetchProfile}
-          className="rounded-lg bg-emerald-500 px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-emerald-400"
-        >
-          Try again
-        </button>
       </div>
     );
   }
