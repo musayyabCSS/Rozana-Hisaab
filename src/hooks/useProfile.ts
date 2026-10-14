@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import type { User } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
 
 export interface UserProfile {
@@ -8,15 +9,16 @@ export interface UserProfile {
 
 const CACHED_PROFILE_KEY = 'rozana_cached_profile';
 
-function extractProfile(user: any): UserProfile {
-  const metadata = user?.user_metadata || {};
+function extractProfile(user: User): UserProfile {
+  const metadata: Record<string, unknown> = user.user_metadata;
+  const name =
+    [metadata.full_name, metadata.name, user.email?.split('@')[0]].find(
+      (value): value is string => typeof value === 'string' && value.length > 0,
+    ) ?? 'User';
+
   return {
-    name:
-      metadata.full_name ||
-      metadata.name ||
-      user?.email?.split('@')[0] ||
-      'User',
-    avatar: metadata.avatar_url || null,
+    name,
+    avatar: typeof metadata.avatar_url === 'string' ? metadata.avatar_url : null,
   };
 }
 

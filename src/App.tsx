@@ -242,15 +242,15 @@ function App() {
         </div>
       )}
       <Header
-  language={language}
-  onToggleLanguage={toggleLanguage}
-  dir={dir}
-  profile={profile}
-  onAvatarChange={updateAvatar}
-  onImportBank={() => setShowImport(true)}
-  onLogout={handleLogout}
-  userId={session?.user?.id} // Add this line
-/>
+        language={language}
+        onToggleLanguage={toggleLanguage}
+        dir={dir}
+        profile={profile}
+        onAvatarChange={(avatar) => updateProfile({ avatar })}
+        onImportBank={() => setActiveModal('bank')}
+        onLogout={handleLogout}
+        userId={session?.user?.id}
+      />
       <main className="max-w-md mx-auto px-4 py-5 pb-32 space-y-4">
         <BudgetCard
           availableFunds={stats.availableFunds}
