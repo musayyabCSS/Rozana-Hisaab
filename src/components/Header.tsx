@@ -1,8 +1,9 @@
 import { useRef } from 'react';
-import { Languages, Camera, FileUp, LogOut } from 'lucide-react';
+import { Languages, Camera, FileUp, LogOut, Bell, BellRing } from 'lucide-react';
 import type { Language } from '@/types';
 import { tr } from '@/lib/i18n';
 import type { UserProfile } from '@/hooks/useProfile';
+import { usePushNotifications } from '@/hooks/usePushNotifications';
 
 interface HeaderProps {
   language: Language;
@@ -12,6 +13,7 @@ interface HeaderProps {
   onAvatarChange: (avatar: string) => void;
   onImportBank: () => void;
   onLogout: () => void;
+  userId?: string; // Passed from App.tsx session.user.id
 }
 
 function getInitials(name: string, lang: Language): string {
@@ -31,10 +33,14 @@ export function Header({
   onAvatarChange,
   onImportBank,
   onLogout,
+  userId,
 }: HeaderProps) {
   const fileRef = useRef<HTMLInputElement>(null);
   const displayName = profile?.name ?? tr('userName', language);
   const initials = profile ? getInitials(profile.name, language) : language === 'ur' ? 'م' : 'MH';
+  
+  // Initialize Push Notifications Hook
+  const { isSubscribed, subscribeToPush, loading } = usePushNotifications(userId);
 
   const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -60,7 +66,7 @@ export function Header({
           />
           <button
             onClick={() => fileRef.current?.click()}
-            className="relative group"
+            className="relative group shrink-0"
             aria-label="Change profile photo"
           >
             {profile?.avatar ? (
@@ -85,24 +91,48 @@ export function Header({
         </div>
 
         <div className={`flex shrink-0 items-center gap-1.5 ${dir === 'rtl' ? 'flex-row-reverse' : ''}`}>
+          
+          {/* Push Notification Toggle Button */}
+          <button
+            onClick={subscribeToPush}
+            disabled={loading || isSubscribed}
+            title={isSubscribed ? 'Reminders Active' : 'Enable Reminders'}
+            className={`flex items-center justify-center h-9 w-9 sm:w-auto sm:px-3 sm:py-2 rounded-xl border transition-all active:scale-95 ${
+              isSubscribed
+                ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30 cursor-default'
+                : 'bg-slate-800/80 hover:bg-emerald-500/20 text-slate-300 hover:text-emerald-400 border-slate-700 hover:border-emerald-500/30'
+            }`}
+            aria-label="Toggle Reminders"
+          >
+            {isSubscribed ? <BellRing size={16} /> : <Bell size={16} />}
+            <span className="text-xs font-semibold hidden sm:inline sm:ml-1.5">
+              {isSubscribed ? 'Active' : 'Alerts'}
+            </span>
+          </button>
+
+          {/* Import Bank Button */}
           <button
             onClick={onImportBank}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 transition-all active:scale-95 text-emerald-400"
+            className="flex items-center justify-center h-9 w-9 sm:w-auto sm:px-3 sm:py-2 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 transition-all active:scale-95 text-emerald-400"
             aria-label={tr('bankTitle', language)}
           >
             <FileUp size={16} />
-            <span className="text-xs font-semibold hidden sm:inline">{tr('importBank', language)}</span>
+            <span className="text-xs font-semibold hidden sm:inline sm:ml-1.5">{tr('importBank', language)}</span>
           </button>
+
+          {/* Language Toggle */}
           <button
             onClick={onToggleLanguage}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-800/80 hover:bg-slate-700 border border-slate-700 transition-all active:scale-95 text-slate-300 hover:text-slate-100"
+            className="flex items-center justify-center h-9 w-9 sm:w-auto sm:px-3 sm:py-2 rounded-xl bg-slate-800/80 hover:bg-slate-700 border border-slate-700 transition-all active:scale-95 text-slate-300 hover:text-slate-100"
             aria-label="Toggle language"
           >
             <Languages size={16} className="text-emerald-400" />
-            <span className="text-xs font-semibold">
-              {language === 'en' ? 'EN / اردو' : 'اردو / EN'}
+            <span className="text-xs font-semibold hidden sm:inline sm:ml-1.5">
+              {language === 'en' ? 'EN' : 'اردو'}
             </span>
           </button>
+
+          {/* Logout */}
           <button
             type="button"
             onClick={onLogout}
