@@ -47,16 +47,22 @@ export function Auth() {
     setLoading(false);
   };
 
-  const handleGoogleLogin = async () => {
-    setError(null);
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: 'google',
-      options: {
-        redirectTo: window.location.origin,
+  const handleGoogleSignIn = async () => {
+  const { error } = await supabase.auth.signInWithOAuth({
+    provider: 'google',
+    options: {
+      redirectTo: window.location.origin,
+      queryParams: {
+        prompt: 'select_account', // Forces Google to show the account list every time
+        access_type: 'offline',
       },
-    });
-    if (error) setError(error.message);
-  };
+    },
+  });
+
+  if (error) {
+    console.error('Error logging in with Google:', error.message);
+  }
+};
 
   return (
     <div className="flex flex-col items-center justify-center min-h-screen p-4 bg-slate-950 text-white">
