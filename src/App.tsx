@@ -33,9 +33,16 @@ function App() {
   // --- EXISTING APP STATE ---
   const { language, toggleLanguage, dir } = useLanguage();
   const { transactions, addTransaction, deleteTransaction, updateTransaction } = useTransactions();
-  const { profile, onboarded, loading: loadingProfile, saveProfile, updateProfile } = useProfile(
-    session?.user.id,
-  );
+  const {
+    profile,
+    onboarded,
+    loading: loadingProfile,
+    profileResolved,
+    profileLoadError,
+    saveProfile,
+    updateProfile,
+    refetchProfile,
+  } = useProfile(session?.user.id);
   const [activeModal, setActiveModal] = useState<ModalType>(null);
   const [feedFilter, setFeedFilter] = useState<'all' | 'income' | 'expense'>('all');
   const [showWelcome, setShowWelcome] = useState(() => onboarded);
@@ -68,6 +75,10 @@ function App() {
   }, [passwordUpdatedNotice]);
 
   const handleLogout = async () => {
+    localStorage.removeItem('rozana_cached_profile');
+    if (session?.user.id) {
+      localStorage.removeItem(`rozana_profile_${session.user.id}`);
+    }
     await supabase.auth.signOut();
   };
 
@@ -148,8 +159,25 @@ function App() {
 
   if (loadingProfile) {
     return (
-      <div className="min-h-[100dvh] bg-slate-950 pb-[env(safe-area-inset-bottom,0px)] text-emerald-400 flex items-center justify-center animate-pulse">
+      <div className="min-h-[100dvh] bg-[#0b0f19] pb-[env(safe-area-inset-bottom,0px)] text-slate-100 flex items-center justify-center animate-pulse">
         Loading Rozana Hisaab...
+      </div>
+    );
+  }
+
+  if (!profileResolved) {
+    return (
+      <div className="flex min-h-[100dvh] flex-col items-center justify-center gap-4 bg-[#0b0f19] px-4 pb-[env(safe-area-inset-bottom,0px)] text-slate-100">
+        <p className="text-center text-sm text-slate-300">
+          {profileLoadError ?? 'Your profile is not available yet. Check your connection and try again.'}
+        </p>
+        <button
+          type="button"
+          onClick={refetchProfile}
+          className="rounded-lg bg-emerald-500 px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-emerald-400"
+        >
+          Try again
+        </button>
       </div>
     );
   }
@@ -182,7 +210,7 @@ function App() {
   // --- MAIN DASHBOARD ---
   return (
     <div
-      className="min-h-[100dvh] bg-slate-950 pb-[env(safe-area-inset-bottom,0px)] text-slate-100 animate-[fadeIn_0.5s_ease-out]"
+      className="min-h-[100dvh] bg-[#0b0f19] text-slate-100 pb-[env(safe-area-inset-bottom,0px)] animate-[fadeIn_0.5s_ease-out]"
       dir={dir}
     >
       {passwordUpdatedNotice && (
