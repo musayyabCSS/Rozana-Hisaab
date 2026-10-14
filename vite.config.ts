@@ -15,6 +15,8 @@ export default defineConfig({
         navigateFallback: '/index.html',
         navigateFallbackDenylist: [/^\/auth/, /^\/api/, /^\/functions/],
         cleanupOutdatedCaches: true,
+        skipWaiting: true,
+        clientsClaim: true,
       },
     }),
   ],
