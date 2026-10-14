@@ -33,22 +33,31 @@ function App() {
 
   // --- EXISTING APP STATE ---
   const { language, toggleLanguage, dir } = useLanguage();
-  const { transactions, addTransaction, deleteTransaction, updateTransaction } = useTransactions();
+  const { transactions, addTransaction, deleteTransaction, updateTransaction } = useTransactions(
+    session?.user.id,
+  );
   const {
     profile,
     onboarded,
     loading: loadingProfile,
     saveProfile,
     updateProfile,
-    refetchProfile,
   } = useProfile(session?.user.id);
   const [activeModal, setActiveModal] = useState<ModalType>(null);
   const [feedFilter, setFeedFilter] = useState<'all' | 'income' | 'expense'>('all');
-  const [showWelcome, setShowWelcome] = useState(() => onboarded);
+  const [showWelcome, setShowWelcome] = useState(
+    () => onboarded && (typeof navigator === 'undefined' || navigator.onLine),
+  );
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
 
   const now = new Date();
   const stats = getMonthStats(transactions, now.getFullYear(), now.getMonth());
+
+  useEffect(() => {
+    if (typeof navigator !== 'undefined' && !navigator.onLine && onboarded && profile) {
+      setShowWelcome(false);
+    }
+  }, [onboarded, profile]);
 
   // --- SUPABASE AUTH LISTENER ---
   useEffect(() => {
