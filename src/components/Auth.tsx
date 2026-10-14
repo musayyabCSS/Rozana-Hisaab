@@ -67,9 +67,30 @@ const handleGoogleLogin = async () => {
   };
   
   return (
-    <div className="flex flex-col items-center justify-center min-h-screen p-4 bg-slate-950 text-white">
-      <div className="w-full max-w-sm p-6 bg-slate-900 rounded-2xl border border-slate-800 space-y-4 shadow-xl">
-        <h2 className="text-2xl font-bold text-center text-emerald-400">Rozana Hisaab</h2>
+    <div className="flex min-h-screen min-h-[100dvh] flex-col items-center justify-center gap-8 bg-slate-950 px-4 pt-[max(1rem,env(safe-area-inset-top))] pb-[max(1rem,env(safe-area-inset-bottom))] text-white">
+      <header className="w-full max-w-xl space-y-4 text-center">
+        <h1 className="text-3xl font-bold tracking-tight text-emerald-400">
+          Rozana Hisaab — Smart Expense Tracker
+        </h1>
+        <p className="text-sm leading-relaxed text-slate-300">
+          Track daily expenses, record voice transactions, and scan bills with AI.
+        </p>
+        <ul className="flex flex-wrap justify-center gap-2" aria-label="App features">
+          {['Daily Ledgers', 'Instant Voice Input', 'Receipt & Bill OCR'].map((feature) => (
+            <li
+              key={feature}
+              className="rounded-full border border-slate-700 bg-slate-900 px-3 py-1.5 text-xs font-medium text-slate-300"
+            >
+              {feature}
+            </li>
+          ))}
+        </ul>
+      </header>
+
+      <div className="w-full max-w-sm space-y-4 rounded-2xl border border-slate-800 bg-slate-900 p-6 shadow-xl">
+        <h2 className="text-xl font-bold text-center text-emerald-400">
+          {showResetForm ? 'Reset your password' : isSignUp ? 'Create your account' : 'Welcome back'}
+        </h2>
         <p className="text-xs text-slate-400 text-center">
           {showResetForm
             ? 'Reset your password'
@@ -220,6 +241,23 @@ const handleGoogleLogin = async () => {
           </>
         )}
       </div>
+      <footer className="flex flex-wrap items-center justify-center gap-x-4 gap-y-2 text-xs text-slate-400">
+        <a href="/privacy" className="underline underline-offset-4 hover:text-white">
+          Privacy Policy
+        </a>
+        <a href="/terms" className="underline underline-offset-4 hover:text-white">
+          Terms of Service
+        </a>
+        <span>
+          Contact Support:{' '}
+          <a
+            href="mailto:musayyab@chatsupportservice.com"
+            className="underline underline-offset-4 hover:text-white"
+          >
+            musayyab@chatsupportservice.com
+          </a>
+        </span>
+      </footer>
     </div>
   );
 }
