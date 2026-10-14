@@ -33,7 +33,9 @@ function App() {
   // --- EXISTING APP STATE ---
   const { language, toggleLanguage, dir } = useLanguage();
   const { transactions, addTransaction, deleteTransaction, updateTransaction } = useTransactions();
-  const { profile, onboarded, saveProfile, updateProfile } = useProfile();
+  const { profile, onboarded, loading: loadingProfile, saveProfile, updateProfile } = useProfile(
+    session?.user.id,
+  );
   const [activeModal, setActiveModal] = useState<ModalType>(null);
   const [feedFilter, setFeedFilter] = useState<'all' | 'income' | 'expense'>('all');
   const [showWelcome, setShowWelcome] = useState(() => onboarded);
@@ -119,7 +121,7 @@ function App() {
   // 1. Loading Session Screen
   if (loadingSession) {
     return (
-      <div className="min-h-screen bg-slate-950 text-emerald-400 flex items-center justify-center animate-pulse">
+      <div className="min-h-[100dvh] bg-slate-950 pb-[env(safe-area-inset-bottom,0px)] text-emerald-400 flex items-center justify-center animate-pulse">
         Loading Rozana Hisaab...
       </div>
     );
@@ -142,6 +144,14 @@ function App() {
   // 2. Auth Login/Signup Screen
   if (!session) {
     return <Auth />;
+  }
+
+  if (loadingProfile) {
+    return (
+      <div className="min-h-[100dvh] bg-slate-950 pb-[env(safe-area-inset-bottom,0px)] text-emerald-400 flex items-center justify-center animate-pulse">
+        Loading Rozana Hisaab...
+      </div>
+    );
   }
 
   // 3. Profile Onboarding
@@ -172,7 +182,7 @@ function App() {
   // --- MAIN DASHBOARD ---
   return (
     <div
-      className="min-h-screen bg-slate-950 text-slate-100 animate-[fadeIn_0.5s_ease-out]"
+      className="min-h-[100dvh] bg-slate-950 pb-[env(safe-area-inset-bottom,0px)] text-slate-100 animate-[fadeIn_0.5s_ease-out]"
       dir={dir}
     >
       {passwordUpdatedNotice && (

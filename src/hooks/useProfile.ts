@@ -6,48 +6,113 @@ export interface UserProfile {
   avatar: string | null;
 }
 
-export function useProfile() {
+const cachedProfileKey = 'rozana_cached_profile';
+
+function parseProfile(value: unknown): UserProfile | null {
+  if (typeof value !== 'object' || value === null) return null;
+  const profile = value as Record<string, unknown>;
+  if (typeof profile.name !== 'string') return null;
+  if (profile.avatar !== null && typeof profile.avatar !== 'string') return null;
+  return { name: profile.name, avatar: profile.avatar };
+}
+
+function readCachedProfile(userId?: string): UserProfile | null {
+  try {
+    if (userId) {
+      const saved = localStorage.getItem(`rozana_profile_${userId}`);
+      const userProfile = saved ? parseProfile(JSON.parse(saved)) : null;
+      if (userProfile) return userProfile;
+    }
+
+    const cached = localStorage.getItem(cachedProfileKey);
+    if (!cached) return null;
+    const parsed = JSON.parse(cached) as { userId?: unknown; profile?: unknown };
+    if (userId && parsed.userId !== userId) return null;
+    return parseProfile(parsed.profile);
+  } catch (error) {
+    console.error('Error reading cached profile:', error);
+    return null;
+  }
+}
+
+function writeCachedProfile(userId: string, profile: UserProfile) {
+  localStorage.setItem(`rozana_profile_${userId}`, JSON.stringify(profile));
+  localStorage.setItem(cachedProfileKey, JSON.stringify({ userId, profile }));
+}
+
+export function useProfile(activeUserId?: string) {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [onboarded, setOnboarded] = useState<boolean>(false);
   const [loading, setLoading] = useState(true);
 
   const loadProfile = useCallback(async () => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) {
-      setProfile(null);
-      setOnboarded(false);
-      setLoading(false);
+    if (!activeUserId) {
+      setLoading(true);
       return;
     }
 
-    // Key local profile storage strictly by active Supabase User ID
-    const storageKey = `rozana_profile_${user.id}`;
-    const saved = localStorage.getItem(storageKey);
-
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        setProfile(parsed);
-        setOnboarded(true);
-      } catch (e) {
-        console.error('Error parsing stored profile', e);
+    setLoading(true);
+    let sessionProfile: UserProfile | null = null;
+    try {
+      const { data: { session }, error } = await supabase.auth.getSession();
+      if (error) throw error;
+      const user = session?.user;
+      if (!user || user.id !== activeUserId) {
+        const cached = readCachedProfile(activeUserId);
+        setProfile(cached);
+        setOnboarded(!!cached);
+        return;
       }
-    } else {
-      // Auto-extract Google full name/photo or email name if no custom profile exists
-      const defaultName =
-        user.user_metadata?.full_name ||
-        user.user_metadata?.name ||
-        user.email?.split('@')[0] ||
-        'User';
-      const defaultAvatar = user.user_metadata?.avatar_url || null;
 
-      const initialProfile = { name: defaultName, avatar: defaultAvatar };
+      sessionProfile = {
+        name:
+          user.user_metadata?.full_name ||
+          user.user_metadata?.name ||
+          user.email?.split('@')[0] ||
+          'User',
+        avatar: user.user_metadata?.avatar_url || null,
+      };
+      const cached = readCachedProfile(user.id);
+      if (typeof navigator !== 'undefined' && !navigator.onLine && cached) {
+        setProfile(cached);
+        setOnboarded(true);
+        return;
+      }
+
+      const { data: { user: fetchedUser }, error: fetchError } = await supabase.auth.getUser();
+      if (fetchError) throw fetchError;
+      const fetchedProfile = fetchedUser
+        ? {
+            name:
+              fetchedUser.user_metadata?.full_name ||
+              fetchedUser.user_metadata?.name ||
+              fetchedUser.email?.split('@')[0] ||
+              'User',
+            avatar: fetchedUser.user_metadata?.avatar_url || null,
+          }
+        : sessionProfile;
+      const initialProfile = cached ?? fetchedProfile;
+      if (!initialProfile) {
+        throw new Error('Could not resolve a profile for the active user.');
+      }
+      writeCachedProfile(user.id, initialProfile);
       setProfile(initialProfile);
       setOnboarded(true);
-      localStorage.setItem(storageKey, JSON.stringify(initialProfile));
+    } catch (error) {
+      console.error('Error loading profile:', error);
+      const fallbackProfile = readCachedProfile(activeUserId) ?? sessionProfile;
+      if (fallbackProfile) {
+        if (sessionProfile) writeCachedProfile(activeUserId, fallbackProfile);
+        setProfile(fallbackProfile);
+        setOnboarded(true);
+      } else {
+        setProfile(null);
+        setOnboarded(false);
+      }
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
-  }, []);
+  }, [activeUserId]);
 
   useEffect(() => {
     loadProfile();
@@ -60,23 +125,23 @@ export function useProfile() {
   }, [loadProfile]);
 
   const saveProfile = useCallback(async (newProfile: UserProfile) => {
-    const { data: { user } } = await supabase.auth.getUser();
+    const { data: { session } } = await supabase.auth.getSession();
+    const user = session?.user;
     if (!user) return;
 
-    const storageKey = `rozana_profile_${user.id}`;
-    localStorage.setItem(storageKey, JSON.stringify(newProfile));
+    writeCachedProfile(user.id, newProfile);
     setProfile(newProfile);
     setOnboarded(true);
   }, []);
 
   const updateProfile = useCallback(async (updates: Partial<UserProfile>) => {
-    const { data: { user } } = await supabase.auth.getUser();
+    const { data: { session } } = await supabase.auth.getSession();
+    const user = session?.user;
     if (!user) return;
 
-    const storageKey = `rozana_profile_${user.id}`;
     setProfile((prev) => {
       const updated = prev ? { ...prev, ...updates } : { name: 'User', avatar: null, ...updates };
-      localStorage.setItem(storageKey, JSON.stringify(updated));
+      writeCachedProfile(user.id, updated);
       return updated;
     });
   }, []);
