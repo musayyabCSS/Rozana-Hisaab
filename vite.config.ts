@@ -17,7 +17,7 @@ export default defineConfig({
         cleanupOutdatedCaches: true,
         skipWaiting: true,
         clientsClaim: true,
-        importscript: ['/sw-push.js'],
+        importScript: ['/sw-push.js'],
       },
     }),
   ],
