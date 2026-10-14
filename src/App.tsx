@@ -29,6 +29,7 @@ function App() {
   const [loadingSession, setLoadingSession] = useState(true);
   const [passwordRecovery, setPasswordRecovery] = useState(false);
   const [passwordUpdatedNotice, setPasswordUpdatedNotice] = useState(false);
+  const [oauthError, setOauthError] = useState<string | null>(null);
 
   // --- EXISTING APP STATE ---
   const { language, toggleLanguage, dir } = useLanguage();
@@ -53,13 +54,38 @@ function App() {
 
   // --- SUPABASE AUTH LISTENER ---
   useEffect(() => {
+    const searchParams = new URLSearchParams(window.location.search);
+    const hashParams = new URLSearchParams(window.location.hash.slice(1));
+    const oauthErrorCode =
+      searchParams.get('error') ??
+      hashParams.get('error') ??
+      (window.location.search.includes('bad_oauth_state') ||
+      window.location.hash.includes('bad_oauth_state')
+        ? 'bad_oauth_state'
+        : null);
+
+    if (oauthErrorCode) {
+      const errorMessage =
+        searchParams.get('error_description') ??
+        hashParams.get('error_description') ??
+        (oauthErrorCode === 'bad_oauth_state'
+          ? 'Google sign-in could not be verified. Please try again.'
+          : oauthErrorCode);
+      setOauthError(errorMessage.replace(/\+/g, ' '));
+      setSession(null);
+      window.history.replaceState({}, document.title, window.location.pathname);
+    }
+
     supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
+      if (!oauthErrorCode) setSession(session);
       setLoadingSession(false);
     });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      setSession(session);
+      if (!oauthErrorCode || event === 'SIGNED_IN') {
+        setSession(session);
+        if (event === 'SIGNED_IN') setOauthError(null);
+      }
       if (event === 'PASSWORD_RECOVERY') {
         setPasswordRecovery(true);
       }
@@ -152,9 +178,13 @@ function App() {
     );
   }
 
+  if (oauthError) {
+    return <Auth initialError={oauthError} />;
+  }
+
   // 2. Auth Login/Signup Screen
   if (!session) {
-    return <Auth />;
+    return <Auth initialError={oauthError} />;
   }
 
   if (loadingProfile) {
