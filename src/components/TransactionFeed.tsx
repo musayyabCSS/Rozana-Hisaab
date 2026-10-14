@@ -37,7 +37,7 @@ export function TransactionFeed({
   onUpdate,
 }: TransactionFeedProps) {
   const [receiptPreview, setReceiptPreview] = useState<string | null>(null);
-  const [receiptError, setReceiptError] = useState<string | null>(null);
+  const [receiptError, setReceiptError] = useState<{ id: string; message: string } | null>(null);
   const [showAll, setShowAll] = useState(false);
   const [search, setSearch] = useState('');
   const [dateRange, setDateRange] = useState<'month' | '30days' | 'all'>('all');
@@ -52,6 +52,12 @@ export function TransactionFeed({
     },
     [receiptPreview],
   );
+
+  useEffect(() => {
+    if (!receiptError) return;
+    const timeoutId = window.setTimeout(() => setReceiptError(null), 3000);
+    return () => window.clearTimeout(timeoutId);
+  }, [receiptError]);
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -107,15 +113,19 @@ export function TransactionFeed({
     return groups;
   }, []);
 
-  const showReceipt = async (transactionId: string) => {
+  const showReceipt = async (transaction: Transaction) => {
     setReceiptError(null);
     try {
-      const imageUrl = await getReceiptImage(transactionId);
+      const imageUrl = await getReceiptImage(transaction.id);
       if (!imageUrl) {
         setReceiptError(
-          language === 'ur'
-            ? 'رسید کی تصویر اس ڈیوائس پر موجود نہیں۔'
-            : 'Receipt image is not available on this device.',
+          {
+            id: transaction.id,
+            message:
+              language === 'ur'
+                ? 'رسید کی تصویر اس ڈیوائس پر موجود نہیں۔'
+                : 'Receipt image is not available on this device.',
+          },
         );
         return;
       }
@@ -123,9 +133,13 @@ export function TransactionFeed({
     } catch (error) {
       console.error('Error loading receipt image:', error);
       setReceiptError(
-        language === 'ur'
-          ? 'رسید کی تصویر لوڈ نہیں ہو سکی۔'
-          : 'Could not load receipt image.',
+        {
+          id: transaction.id,
+          message:
+            language === 'ur'
+              ? 'رسید کی تصویر لوڈ نہیں ہو سکی۔'
+              : 'Could not load receipt image.',
+        },
       );
     }
   };
@@ -378,7 +392,7 @@ export function TransactionFeed({
                           {txn.has_receipt && (
                             <button
                               type="button"
-                              onClick={() => void showReceipt(txn.id)}
+                              onClick={() => void showReceipt(txn)}
                               className="rounded-lg p-1.5 text-slate-500 hover:bg-sky-500/10 hover:text-sky-400"
                               aria-label={language === 'ur' ? 'رسید دیکھیں' : 'View receipt'}
                             >
@@ -403,6 +417,15 @@ export function TransactionFeed({
                           </button>
                         </div>
                       </div>
+                      {receiptError?.id === txn.id && (
+                        <div
+                          role="alert"
+                          className="mt-1 flex items-center gap-1.5 rounded-lg border border-rose-500/20 bg-rose-500/10 px-3 py-1.5 text-xs text-rose-400 animate-[fadeIn_0.2s_ease-out]"
+                        >
+                          <span aria-hidden="true">⚠️</span>
+                          <span>{receiptError.message}</span>
+                        </div>
+                      )}
                     </div>
                     );
                   })}
@@ -410,12 +433,6 @@ export function TransactionFeed({
               </section>
             ))}
           </div>
-      )}
-
-      {receiptError && (
-        <p role="alert" className="mt-3 text-xs text-rose-400">
-          {receiptError}
-        </p>
       )}
 
       {receiptPreview && (
