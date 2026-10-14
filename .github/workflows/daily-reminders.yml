@@ -1,0 +1,32 @@
+name: Daily Due Date Reminders
+
+on:
+  schedule:
+    # 04:00 UTC = 09:00 AM Pakistan Standard Time (PKT)
+    - cron: '0 4 * * *'
+  # Enables the manual trigger button in GitHub Actions
+  workflow_dispatch:
+
+jobs:
+  send-reminders:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        run: npm install web-push @supabase/supabase-js
+
+      - name: Run reminder script
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          VITE_VAPID_PUBLIC_KEY: ${{ secrets.VITE_VAPID_PUBLIC_KEY }}
+          VAPID_PRIVATE_KEY: ${{ secrets.VAPID_PRIVATE_KEY }}
+        run: node scripts/send-reminders.mjs
