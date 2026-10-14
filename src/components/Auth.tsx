@@ -241,22 +241,21 @@ const handleGoogleLogin = async () => {
           </>
         )}
       </div>
-      <footer className="flex flex-wrap items-center justify-center gap-x-4 gap-y-2 text-xs text-slate-400">
-        <a href="/privacy" className="underline underline-offset-4 hover:text-white">
+      <footer className="flex flex-wrap items-center justify-center gap-x-3 gap-y-2 text-xs text-slate-400">
+        <a href="/privacy" className="transition-colors hover:text-white">
           Privacy Policy
         </a>
-        <a href="/terms" className="underline underline-offset-4 hover:text-white">
+        <span aria-hidden="true" className="text-slate-600">·</span>
+        <a href="/terms" className="transition-colors hover:text-white">
           Terms of Service
         </a>
-        <span>
-          Contact Support:{' '}
-          <a
-            href="mailto:musayyab@chatsupportservice.com"
-            className="underline underline-offset-4 hover:text-white"
-          >
-            musayyab@chatsupportservice.com
-          </a>
-        </span>
+        <span aria-hidden="true" className="text-slate-600">·</span>
+        <a
+          href="mailto:musayyab@chatsupportservice.com?subject=Rozana%20Hisaab%20Support"
+          className="transition-colors hover:text-white"
+        >
+          Contact Support
+        </a>
       </footer>
     </div>
   );
