@@ -9,6 +9,24 @@ export interface UserProfile {
 
 const CACHED_PROFILE_KEY = 'rozana_cached_profile';
 
+function readCachedAvatar(userId: string): { found: boolean; avatar: string | null } {
+  try {
+    const avatar = localStorage.getItem(`profile_avatar_${userId}`);
+    return { found: avatar !== null, avatar: avatar || null };
+  } catch (error) {
+    console.warn('Could not read cached profile photo:', error);
+    return { found: false, avatar: null };
+  }
+}
+
+function writeCachedAvatar(userId: string, avatar: string | null) {
+  try {
+    localStorage.setItem(`profile_avatar_${userId}`, avatar ?? '');
+  } catch (error) {
+    console.warn('Could not cache profile photo on this device:', error);
+  }
+}
+
 function extractProfile(user: User): UserProfile {
   const metadata: Record<string, unknown> = user.user_metadata;
   const name =
@@ -26,7 +44,11 @@ function readCachedProfile(userId?: string): UserProfile | null {
   try {
     if (userId) {
       const userCached = localStorage.getItem(`rozana_profile_${userId}`);
-      if (userCached) return JSON.parse(userCached);
+      if (userCached) {
+        const profile = JSON.parse(userCached) as UserProfile;
+        const cachedAvatar = readCachedAvatar(userId);
+        return cachedAvatar.found ? { ...profile, avatar: cachedAvatar.avatar } : profile;
+      }
     }
     const genericCached = localStorage.getItem(CACHED_PROFILE_KEY);
     if (genericCached) return JSON.parse(genericCached);
@@ -40,6 +62,7 @@ function writeCachedProfile(userId: string, profile: UserProfile) {
   try {
     localStorage.setItem(`rozana_profile_${userId}`, JSON.stringify(profile));
     localStorage.setItem(CACHED_PROFILE_KEY, JSON.stringify(profile));
+    writeCachedAvatar(userId, profile.avatar);
   } catch (e) {
     console.error('Error writing profile cache:', e);
   }
@@ -65,6 +88,10 @@ export function useProfile(activeUserId?: string) {
       // Read local cache first, fallback to user metadata
       const cached = readCachedProfile(user.id);
       const userProfile = cached ?? extractProfile(user);
+      const cachedAvatar = readCachedAvatar(user.id);
+      if (cachedAvatar.found) {
+        userProfile.avatar = cachedAvatar.avatar;
+      }
 
       writeCachedProfile(user.id, userProfile);
       setProfile(userProfile);
@@ -86,7 +113,11 @@ export function useProfile(activeUserId?: string) {
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       if (session?.user) {
-        const userProfile = extractProfile(session.user);
+        const userProfile = readCachedProfile(session.user.id) ?? extractProfile(session.user);
+        const cachedAvatar = readCachedAvatar(session.user.id);
+        if (cachedAvatar.found) {
+          userProfile.avatar = cachedAvatar.avatar;
+        }
         writeCachedProfile(session.user.id, userProfile);
         setProfile(userProfile);
         setOnboarded(true);
@@ -112,15 +143,35 @@ export function useProfile(activeUserId?: string) {
   }, []);
 
   const updateProfile = useCallback(async (updates: Partial<UserProfile>) => {
-    const { data: { session } } = await supabase.auth.getSession();
-    const user = session?.user;
+    const updated = profile ? { ...profile, ...updates } : { name: 'User', avatar: null, ...updates };
+    setProfile(updated);
+    if (activeUserId) {
+      writeCachedProfile(activeUserId, updated);
+    }
 
-    setProfile((prev) => {
-      const updated = prev ? { ...prev, ...updates } : { name: 'User', avatar: null, ...updates };
-      if (user) writeCachedProfile(user.id, updated);
-      return updated;
-    });
-  }, []);
+    if (updates.avatar !== undefined) {
+      try {
+        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+        if (sessionError) throw sessionError;
+        const user = session?.user;
+        if (!user || (activeUserId && user.id !== activeUserId)) {
+          console.warn('Could not confirm the active user; profile photo remains cached on this device.');
+          return;
+        }
+        if (!activeUserId) writeCachedProfile(user.id, updated);
+
+        const { error } = await supabase.auth.updateUser({
+          data: { avatar_url: updates.avatar },
+        });
+        if (error) throw error;
+      } catch (error) {
+        console.warn(
+          'Could not save profile photo to Supabase; the photo remains cached on this device.',
+          error,
+        );
+      }
+    }
+  }, [activeUserId, profile]);
 
   return {
     profile,
