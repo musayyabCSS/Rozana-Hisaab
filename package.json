@@ -1,7 +1,8 @@
 {
-  "name": "vite-react-typescript-starter",
+  "name": "rozana-hisaab",
   "private": true,
   "version": "0.0.0",
+  "description": "Daily expense and bill management PWA for Pakistan",
   "type": "module",
   "scripts": {
     "dev": "vite",
