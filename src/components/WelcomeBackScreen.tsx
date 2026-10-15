@@ -1,4 +1,4 @@
-import { Sparkles, ArrowRight, Languages } from 'lucide-react';
+import { ArrowRight, Languages } from 'lucide-react';
 import type { Language } from '@/types';
 import { tr } from '@/lib/i18n';
 import type { UserProfile } from '@/hooks/useProfile';
@@ -40,9 +40,11 @@ export function WelcomeBackScreen({ profile, language, dir, onToggleLanguage, on
               <img src={profile.avatar} alt={profile.name} className="w-full h-full object-cover" />
             </div>
           ) : (
-            <div className="w-24 h-24 rounded-full bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center shadow-xl shadow-emerald-500/20">
-              <Sparkles size={32} className="text-white" />
-            </div>
+            <img
+              src="/icon.svg"
+              alt="Rozana Hisaab"
+              className="w-20 h-20 mx-auto rounded-2xl shadow-lg shadow-emerald-500/20 object-contain mb-4"
+            />
           )}
         </div>
 
