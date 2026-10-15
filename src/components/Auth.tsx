@@ -73,6 +73,11 @@ const handleGoogleLogin = async () => {
   return (
     <div className="flex min-h-screen min-h-[100dvh] flex-col items-center justify-center gap-8 bg-slate-950 px-4 pt-[max(1rem,env(safe-area-inset-top))] pb-[max(1rem,env(safe-area-inset-bottom))] text-white">
       <header className="w-full max-w-xl space-y-4 text-center">
+        <img
+          src="/icon.svg"
+          alt="Rozana Hisaab Logo"
+          className="mx-auto h-16 w-16 rounded-2xl shadow-lg shadow-emerald-500/20"
+        />
         <h1 className="text-3xl font-bold tracking-tight text-emerald-400">
           Rozana Hisaab — Smart Expense Tracker
         </h1>

@@ -84,7 +84,12 @@ export function Header({
           </button>
           <div className={`min-w-0 ${dir === 'rtl' ? 'text-right' : 'text-left'}`}>
             <p className="truncate text-slate-400 text-xs leading-tight">{displayName}</p>
-            <h1 className="text-slate-100 font-bold text-base leading-tight tracking-tight">
+            <h1 className="flex items-center text-slate-100 font-bold text-base leading-tight tracking-tight">
+              <img
+                src="/icon.svg"
+                alt="Rozana Hisaab"
+                className="mr-2.5 h-9 w-9 rounded-xl"
+              />
               {tr('appName', language)}
             </h1>
           </div>
