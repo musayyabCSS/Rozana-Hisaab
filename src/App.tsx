@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef, type TouchEvent } from 'react';
 import { supabase } from '@/lib/supabase';
 import type { Session } from '@supabase/supabase-js';
 import { Auth } from '@/components/Auth';
@@ -23,6 +23,9 @@ import type { NewTransaction, Transaction } from '@/types';
 
 type ModalType = 'voice' | 'scan' | 'add' | 'bank' | 'export' | null;
 
+const REFRESH_THRESHOLD = 65;
+const MAX_PULL_DISTANCE = 80;
+
 function App() {
   // --- SUPABASE AUTH STATE ---
   const [session, setSession] = useState<Session | null>(null);
@@ -33,9 +36,13 @@ function App() {
 
   // --- EXISTING APP STATE ---
   const { language, toggleLanguage, dir } = useLanguage();
-  const { transactions, addTransaction, deleteTransaction, updateTransaction } = useTransactions(
-    session?.user.id,
-  );
+  const {
+    transactions,
+    addTransaction,
+    deleteTransaction,
+    updateTransaction,
+    refetch: refetchTransactions,
+  } = useTransactions(session?.user.id);
   const {
     profile,
     onboarded,
@@ -49,9 +56,121 @@ function App() {
     () => onboarded && (typeof navigator === 'undefined' || navigator.onLine),
   );
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
+  const [pullDistance, setPullDistance] = useState(0);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const dashboardRef = useRef<HTMLElement | null>(null);
+  const touchStartRef = useRef<{ x: number; y: number } | null>(null);
+  const pullDistanceRef = useRef(0);
+  const thresholdReachedRef = useRef(false);
 
   const now = new Date();
   const stats = getMonthStats(transactions, now.getFullYear(), now.getMonth());
+
+  const isAtTop = (target: EventTarget | null) => {
+    if (window.scrollY !== 0 || (document.scrollingElement?.scrollTop ?? 0) !== 0) {
+      return false;
+    }
+
+    const main = dashboardRef.current;
+    let element = target instanceof Element ? target : null;
+    while (element && main?.contains(element)) {
+      const style = window.getComputedStyle(element);
+      const isScrollable =
+        /(auto|scroll|overlay)/.test(`${style.overflowY} ${style.overflow}`) &&
+        element.scrollHeight > element.clientHeight;
+      if (isScrollable && element.scrollTop !== 0) return false;
+      if (element === main) break;
+      element = element.parentElement;
+    }
+    return true;
+  };
+
+  const handleTouchStart = (event: TouchEvent<HTMLElement>) => {
+    if (
+      event.touches.length !== 1 ||
+      isRefreshing ||
+      activeModal !== null ||
+      editingTransaction !== null ||
+      !isAtTop(event.target) ||
+      (event.target instanceof Element &&
+        event.target.closest(
+          'button, a, input, textarea, select, summary, [role="button"], [role="dialog"], [contenteditable="true"]',
+        ))
+    ) {
+      touchStartRef.current = null;
+      thresholdReachedRef.current = false;
+      return;
+    }
+
+    const touch = event.touches[0];
+    touchStartRef.current = { x: touch.clientX, y: touch.clientY };
+    thresholdReachedRef.current = false;
+  };
+
+  const handleTouchMove = (event: TouchEvent<HTMLElement>) => {
+    const start = touchStartRef.current;
+    if (!start) return;
+    if (event.touches.length !== 1 || !isAtTop(event.target)) {
+      touchStartRef.current = null;
+      pullDistanceRef.current = 0;
+      setPullDistance(0);
+      return;
+    }
+
+    const touch = event.touches[0];
+    const deltaX = touch.clientX - start.x;
+    const deltaY = touch.clientY - start.y;
+    if (Math.abs(deltaX) > Math.abs(deltaY) && Math.abs(deltaX) > 8) {
+      touchStartRef.current = null;
+      pullDistanceRef.current = 0;
+      setPullDistance(0);
+      return;
+    }
+    if (deltaY <= 0) {
+      touchStartRef.current = null;
+      pullDistanceRef.current = 0;
+      setPullDistance(0);
+      return;
+    }
+
+    const distance = Math.min(MAX_PULL_DISTANCE, MAX_PULL_DISTANCE * (1 - Math.exp(-deltaY / 45)));
+    if (!thresholdReachedRef.current && distance >= REFRESH_THRESHOLD) {
+      thresholdReachedRef.current = true;
+      navigator.vibrate?.(10);
+    }
+    pullDistanceRef.current = distance;
+    setPullDistance(distance);
+  };
+
+  const handleTouchEnd = () => {
+    touchStartRef.current = null;
+    if (pullDistanceRef.current < REFRESH_THRESHOLD || isRefreshing) {
+      pullDistanceRef.current = 0;
+      setPullDistance(0);
+      return;
+    }
+
+    pullDistanceRef.current = REFRESH_THRESHOLD;
+    setPullDistance(REFRESH_THRESHOLD);
+    setIsRefreshing(true);
+    void (async () => {
+      try {
+        await refetchTransactions();
+      } catch (error) {
+        console.error('Error refreshing dashboard:', error);
+      } finally {
+        pullDistanceRef.current = 0;
+        setPullDistance(0);
+        setIsRefreshing(false);
+      }
+    })();
+  };
+
+  const handleTouchCancel = () => {
+    touchStartRef.current = null;
+    pullDistanceRef.current = 0;
+    setPullDistance(0);
+  };
 
   useEffect(() => {
     if (typeof navigator !== 'undefined' && !navigator.onLine && onboarded && profile) {
@@ -251,7 +370,34 @@ function App() {
         onLogout={handleLogout}
         userId={session?.user?.id}
       />
-      <main className="max-w-md mx-auto px-4 py-5 pb-32 space-y-4">
+      <main
+        ref={dashboardRef}
+        className="max-w-md mx-auto px-4 py-5 pb-32 space-y-4"
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+        onTouchCancel={handleTouchCancel}
+      >
+        <div
+          role="status"
+          aria-live="polite"
+          aria-hidden={!isRefreshing && pullDistance === 0}
+          className="fixed left-1/2 top-2 z-40 flex h-8 w-8 -translate-x-1/2 items-center justify-center rounded-full border border-slate-700/70 bg-slate-900/90 shadow-lg transition-[transform,opacity] duration-200"
+          style={{
+            opacity: isRefreshing ? 1 : Math.min(pullDistance / 24, 1),
+            transform: `translate(-50%, ${pullDistance}px)`,
+            pointerEvents: 'none',
+          }}
+        >
+          <span
+            className={`h-4 w-4 rounded-full border-2 border-emerald-400/30 border-t-emerald-400 ${
+              isRefreshing || pullDistance >= REFRESH_THRESHOLD ? 'animate-spin' : ''
+            }`}
+          />
+          <span className="sr-only">
+            {isRefreshing ? 'Refreshing dashboard' : 'Release to refresh'}
+          </span>
+        </div>
         <BudgetCard
           availableFunds={stats.availableFunds}
           totalIncome={stats.totalIncome}
