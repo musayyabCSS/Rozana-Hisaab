@@ -37,9 +37,12 @@ export interface Transaction {
   created_at: string;
   has_receipt?: boolean;
   is_paid?: boolean;
+  is_synced?: boolean;
 }
 
 export interface NewTransaction {
+  id?: string;
+  created_at?: string;
   type: TransactionType;
   amount: number;
   category: Category;

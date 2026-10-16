@@ -42,6 +42,7 @@ function App() {
     deleteTransaction,
     updateTransaction,
     refetch: refetchTransactions,
+    offlineSavedNotice,
   } = useTransactions(session?.user.id);
   const {
     profile,
@@ -358,6 +359,15 @@ function App() {
           className="fixed right-4 top-4 z-50 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-300 shadow-lg"
         >
           Password updated successfully.
+        </div>
+      )}
+      {offlineSavedNotice && (
+        <div
+          role="status"
+          aria-live="polite"
+          className="fixed bottom-28 left-1/2 z-50 -translate-x-1/2 rounded-xl border border-slate-700 bg-slate-900/95 px-4 py-2.5 text-sm text-slate-200 shadow-xl"
+        >
+          Saved offline. Will sync when back online.
         </div>
       )}
       <Header
