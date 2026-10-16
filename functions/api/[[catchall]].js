@@ -9,6 +9,7 @@ export async function onRequest(context) {
         "Access-Control-Allow-Origin": "*",
         "Access-Control-Allow-Methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS",
         "Access-Control-Allow-Headers": "*",
+        "Access-Control-Expose-Headers": "*",
         "Access-Control-Max-Age": "86400",
       },
     });
@@ -19,7 +20,6 @@ export async function onRequest(context) {
     const targetPath = url.pathname.replace(/^\/api/, "") || "/";
     const targetUrl = `https://iipkxcmrrutvmvztvwva.supabase.co${targetPath}${url.search}`;
 
-    // Forward only the headers required by Supabase
     const headers = new Headers();
     const forwardedHeaders = [
       "apikey",
@@ -32,11 +32,12 @@ export async function onRequest(context) {
     ];
 
     for (const [key, value] of request.headers.entries()) {
-      const lowerKey = key.toLowerCase();
-      if (forwardedHeaders.includes(lowerKey) || lowerKey.startsWith("x-")) {
+      const lower = key.toLowerCase();
+      if (forwardedHeaders.includes(lower) || lower.startsWith("x-")) {
         headers.set(key, value);
       }
     }
+    headers.set("host", "iipkxcmrrutvmvztvwva.supabase.co");
 
     let body = null;
     if (!["GET", "HEAD"].includes(request.method)) {
@@ -50,21 +51,26 @@ export async function onRequest(context) {
       redirect: "follow",
     });
 
-    const responseHeaders = new Headers(response.headers);
+    // Buffer the body into memory to force Cloudflare to decompress the stream
+    const responseData = await response.arrayBuffer();
+
+    const responseHeaders = new Headers();
+    for (const [key, value] of response.headers.entries()) {
+      const lower = key.toLowerCase();
+      if (!["content-encoding", "content-length", "transfer-encoding", "connection"].includes(lower)) {
+        responseHeaders.set(key, value);
+      }
+    }
     responseHeaders.set("Access-Control-Allow-Origin", "*");
+    responseHeaders.set("Access-Control-Expose-Headers", "*");
 
-    // Prevent ERR_CONNECTION_RESET: Cloudflare decompresses the body,
-    // so content-encoding and content-length must be removed.
-    responseHeaders.delete("content-encoding");
-    responseHeaders.delete("content-length");
-
-    return new Response(response.body, {
+    return new Response(responseData, {
       status: response.status,
       statusText: response.statusText,
       headers: responseHeaders,
     });
   } catch (err) {
-    return new Response(JSON.stringify({ error: err.message || "Proxy error" }), {
+    return new Response(JSON.stringify({ error: err.message || "Proxy exception" }), {
       status: 502,
       headers: {
         "Content-Type": "application/json",
