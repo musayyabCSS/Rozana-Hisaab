@@ -11,9 +11,19 @@ export default defineConfig({
       registerType: 'autoUpdate',
       manifest: false,
       workbox: {
-        globPatterns: ['**/*.{js,css,html,ico,png,svg,json,webmanifest,woff2}'],
+        // Precache app bundles, static assets, and only index.html for the SPA
+        globPatterns: ['**/*.{js,css,ico,png,svg,json,webmanifest,woff2}'],
+        // Explicitly exclude standalone legal pages from Workbox precache
+        globIgnores: ['**/terms.html', '**/privacy.html'],
         navigateFallback: '/index.html',
-        navigateFallbackDenylist: [/^\/auth/, /^\/api/, /^\/functions/],
+        // Prevent SPA fallback routing from hijacking standalone pages or backend APIs
+        navigateFallbackDenylist: [
+          /^\/auth/,
+          /^\/api/,
+          /^\/functions/,
+          /^\/terms/,
+          /^\/privacy/,
+        ],
         cleanupOutdatedCaches: true,
         skipWaiting: true,
         clientsClaim: true,
