@@ -10,54 +10,31 @@ export interface UserProfile {
 
 const CACHED_PROFILE_KEY = 'rozana_cached_profile';
 
-function readCachedAvatar(userId: string): { found: boolean; avatar: string | null } {
-  try {
-    const avatar = localStorage.getItem(`profile_avatar_${userId}`);
-    return { found: avatar !== null, avatar: avatar || null };
-  } catch (error) {
-    console.warn('Could not read cached profile photo:', error);
-    return { found: false, avatar: null };
-  }
-}
-
-function writeCachedAvatar(userId: string, avatar: string | null) {
-  try {
-    localStorage.setItem(`profile_avatar_${userId}`, avatar ?? '');
-  } catch (error) {
-    console.warn('Could not cache profile photo on this device:', error);
-  }
-}
-
 function extractProfile(user: User): UserProfile {
-  const metadata: Record<string, unknown> = user.user_metadata;
+  const metadata = user.user_metadata ?? {};
   const name =
     [metadata.full_name, metadata.name, user.email?.split('@')[0]].find(
-      (value): value is string => typeof value === 'string' && value.length > 0,
+      (value): value is string => typeof value === 'string' && value.trim().length > 0,
     ) ?? 'User';
 
-  return {
-    name,
-    avatar:
-      typeof metadata.avatar_url === 'string'
-        ? metadata.avatar_url
-        : typeof metadata.picture === 'string'
-          ? metadata.picture
-          : null,
-  };
+  const avatar =
+    (typeof metadata.avatar_url === 'string' && metadata.avatar_url.trim().length > 0)
+      ? metadata.avatar_url
+      : (typeof metadata.picture === 'string' && metadata.picture.trim().length > 0)
+        ? metadata.picture
+        : null;
+
+  return { name, avatar };
 }
 
 function readCachedProfile(userId?: string): UserProfile | null {
   try {
     if (userId) {
       const userCached = localStorage.getItem(`rozana_profile_${userId}`);
-      if (userCached) {
-        const profile = JSON.parse(userCached) as UserProfile;
-        const cachedAvatar = readCachedAvatar(userId);
-        return cachedAvatar.found ? { ...profile, avatar: cachedAvatar.avatar } : profile;
-      }
+      if (userCached) return JSON.parse(userCached) as UserProfile;
     }
     const genericCached = localStorage.getItem(CACHED_PROFILE_KEY);
-    if (genericCached) return JSON.parse(genericCached);
+    if (genericCached) return JSON.parse(genericCached) as UserProfile;
   } catch (e) {
     console.error('Error reading profile cache:', e);
   }
@@ -68,7 +45,6 @@ function writeCachedProfile(userId: string, profile: UserProfile) {
   try {
     localStorage.setItem(`rozana_profile_${userId}`, JSON.stringify(profile));
     localStorage.setItem(CACHED_PROFILE_KEY, JSON.stringify(profile));
-    writeCachedAvatar(userId, profile.avatar);
   } catch (e) {
     console.error('Error writing profile cache:', e);
   }
@@ -82,14 +58,18 @@ export function useProfile(activeUserId?: string) {
   const syncProfile = useCallback(async () => {
     if (!navigator.onLine) return;
 
-    const { data: { user }, error } = await supabase.auth.getUser();
-    if (error) throw error;
-    if (!user || (activeUserId && user.id !== activeUserId)) return;
+    try {
+      const { data: { user }, error } = await supabase.auth.getUser();
+      if (error || !user) return;
+      if (activeUserId && user.id !== activeUserId) return;
 
-    const latestProfile = extractProfile(user);
-    writeCachedProfile(user.id, latestProfile);
-    setProfile(latestProfile);
-    setOnboarded(true);
+      const latestProfile = extractProfile(user);
+      writeCachedProfile(user.id, latestProfile);
+      setProfile(latestProfile);
+      setOnboarded(true);
+    } catch (err) {
+      console.warn('Background profile sync skipped:', err);
+    }
   }, [activeUserId]);
 
   const loadProfile = useCallback(async () => {
@@ -103,21 +83,19 @@ export function useProfile(activeUserId?: string) {
         setOnboarded(!!cached);
         return;
       }
-      // Read local cache first, fallback to user metadata
-      // Read local cache first, fallback to user metadata
-      const userProfile = readCachedProfile(user.id) ?? extractProfile(user);
-      const cachedAvatar = readCachedAvatar(user.id);
-      if (cachedAvatar.found) {
-        userProfile.avatar = cachedAvatar.avatar;
-      }
 
-      writeCachedProfile(user.id, userProfile);
-      setProfile(userProfile);
+      // 1. Initial render from cache or session
+      const cached = readCachedProfile(user.id);
+      const sessionProfile = extractProfile(user);
+      const initialProfile = cached?.avatar ? cached : sessionProfile;
+
+      setProfile(initialProfile);
       setOnboarded(true);
+      writeCachedProfile(user.id, initialProfile);
+
+      // 2. Fetch fresh metadata from server when online
       if (navigator.onLine) {
-        void syncProfile().catch((error: unknown) => {
-          console.error('Error syncing profile from Supabase:', error);
-        });
+        void syncProfile();
       }
     } catch (err) {
       console.error('Error loading profile:', err);
@@ -137,13 +115,8 @@ export function useProfile(activeUserId?: string) {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       if (session?.user) {
         const metadataProfile = extractProfile(session.user);
-        const cached = readCachedProfile(session.user.id);
-        const userProfile = {
-          ...metadataProfile,
-          avatar: metadataProfile.avatar ?? cached?.avatar ?? null,
-        };
-        writeCachedProfile(session.user.id, userProfile);
-        setProfile(userProfile);
+        writeCachedProfile(session.user.id, metadataProfile);
+        setProfile(metadataProfile);
         setOnboarded(true);
       } else {
         localStorage.removeItem(CACHED_PROFILE_KEY);
@@ -154,9 +127,7 @@ export function useProfile(activeUserId?: string) {
     });
 
     const handleOnline = () => {
-      void syncProfile().catch((error: unknown) => {
-        console.error('Error syncing profile from Supabase:', error);
-      });
+      void syncProfile();
     };
     window.addEventListener('online', handleOnline);
 
@@ -186,30 +157,35 @@ export function useProfile(activeUserId?: string) {
     const { data: { session }, error: sessionError } = await supabase.auth.getSession();
     if (sessionError) throw sessionError;
     const user = session?.user;
-    if (!user || (activeUserId && user.id !== activeUserId)) {
+    if (!user) {
       throw new Error('Could not confirm the active user. Please sign in again.');
     }
 
     const path = `${user.id}/avatar.${extension}`;
+
+    // 1. Upload to Supabase Storage with upsert
     const { error: uploadError } = await supabase.storage
       .from('avatars')
       .upload(path, file, { upsert: true, contentType: file.type });
     if (uploadError) throw uploadError;
 
+    // 2. Obtain direct public CDN URL
     const { data } = supabase.storage.from('avatars').getPublicUrl(path);
     const publicUrl = `${data.publicUrl}?t=${Date.now()}`;
     const updated = { ...(profile ?? { name: 'User', avatar: null }), avatar: publicUrl };
 
+    // 3. Update local state immediately
     setProfile(updated);
     writeCachedProfile(user.id, updated);
 
+    // 4. Update user metadata in Supabase Auth
     const { error: updateError } = await supabase.auth.updateUser({
       data: { avatar_url: publicUrl },
     });
     if (updateError) throw updateError;
 
     return publicUrl;
-  }, [activeUserId, profile]);
+  }, [profile]);
 
   return {
     profile,
