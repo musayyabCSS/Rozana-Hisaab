@@ -50,6 +50,7 @@ function App() {
     loading: loadingProfile,
     saveProfile,
     uploadAvatar,
+    syncProfile,
   } = useProfile(session?.user.id);
   const [activeModal, setActiveModal] = useState<ModalType>(null);
   const [feedFilter, setFeedFilter] = useState<'all' | 'income' | 'expense'>('all');
@@ -156,7 +157,7 @@ function App() {
     setIsRefreshing(true);
     void (async () => {
       try {
-        await refetchTransactions();
+        await Promise.all([refetchTransactions(), syncProfile()]);
       } catch (error) {
         console.error('Error refreshing dashboard:', error);
       } finally {
@@ -376,6 +377,7 @@ function App() {
         onToggleLanguage={toggleLanguage}
         dir={dir}
         profile={profile}
+        userMetadata={session.user.user_metadata}
         onAvatarChange={async (file) => {
           await uploadAvatar(file);
         }}

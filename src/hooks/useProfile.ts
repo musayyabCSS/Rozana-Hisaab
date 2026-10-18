@@ -37,7 +37,12 @@ function extractProfile(user: User): UserProfile {
 
   return {
     name,
-    avatar: typeof metadata.avatar_url === 'string' ? metadata.avatar_url : null,
+    avatar:
+      typeof metadata.avatar_url === 'string'
+        ? metadata.avatar_url
+        : typeof metadata.picture === 'string'
+          ? metadata.picture
+          : null,
   };
 }
 
@@ -74,6 +79,19 @@ export function useProfile(activeUserId?: string) {
   const [onboarded, setOnboarded] = useState<boolean>(() => !!readCachedProfile(activeUserId));
   const [loading, setLoading] = useState(true);
 
+  const syncProfile = useCallback(async () => {
+    if (!navigator.onLine) return;
+
+    const { data: { user }, error } = await supabase.auth.getUser();
+    if (error) throw error;
+    if (!user || (activeUserId && user.id !== activeUserId)) return;
+
+    const latestProfile = extractProfile(user);
+    writeCachedProfile(user.id, latestProfile);
+    setProfile(latestProfile);
+    setOnboarded(true);
+  }, [activeUserId]);
+
   const loadProfile = useCallback(async () => {
     try {
       const { data: { session } } = await supabase.auth.getSession();
@@ -85,10 +103,9 @@ export function useProfile(activeUserId?: string) {
         setOnboarded(!!cached);
         return;
       }
-
       // Read local cache first, fallback to user metadata
-      const cached = readCachedProfile(user.id);
-      const userProfile = cached ?? extractProfile(user);
+      // Read local cache first, fallback to user metadata
+      const userProfile = readCachedProfile(user.id) ?? extractProfile(user);
       const cachedAvatar = readCachedAvatar(user.id);
       if (cachedAvatar.found) {
         userProfile.avatar = cachedAvatar.avatar;
@@ -97,6 +114,11 @@ export function useProfile(activeUserId?: string) {
       writeCachedProfile(user.id, userProfile);
       setProfile(userProfile);
       setOnboarded(true);
+      if (navigator.onLine) {
+        void syncProfile().catch((error: unknown) => {
+          console.error('Error syncing profile from Supabase:', error);
+        });
+      }
     } catch (err) {
       console.error('Error loading profile:', err);
       const fallback = readCachedProfile(activeUserId);
@@ -107,18 +129,19 @@ export function useProfile(activeUserId?: string) {
     } finally {
       setLoading(false);
     }
-  }, [activeUserId]);
+  }, [activeUserId, syncProfile]);
 
   useEffect(() => {
     loadProfile();
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       if (session?.user) {
-        const userProfile = readCachedProfile(session.user.id) ?? extractProfile(session.user);
-        const cachedAvatar = readCachedAvatar(session.user.id);
-        if (cachedAvatar.found) {
-          userProfile.avatar = cachedAvatar.avatar;
-        }
+        const metadataProfile = extractProfile(session.user);
+        const cached = readCachedProfile(session.user.id);
+        const userProfile = {
+          ...metadataProfile,
+          avatar: metadataProfile.avatar ?? cached?.avatar ?? null,
+        };
         writeCachedProfile(session.user.id, userProfile);
         setProfile(userProfile);
         setOnboarded(true);
@@ -130,8 +153,18 @@ export function useProfile(activeUserId?: string) {
       setLoading(false);
     });
 
-    return () => subscription.unsubscribe();
-  }, [loadProfile]);
+    const handleOnline = () => {
+      void syncProfile().catch((error: unknown) => {
+        console.error('Error syncing profile from Supabase:', error);
+      });
+    };
+    window.addEventListener('online', handleOnline);
+
+    return () => {
+      subscription.unsubscribe();
+      window.removeEventListener('online', handleOnline);
+    };
+  }, [loadProfile, syncProfile]);
 
   const saveProfile = useCallback(async (newProfile: UserProfile) => {
     const { data: { session } } = await supabase.auth.getSession();
@@ -185,5 +218,6 @@ export function useProfile(activeUserId?: string) {
     saveProfile,
     uploadAvatar,
     refetchProfile: loadProfile,
+    syncProfile,
   };
 }

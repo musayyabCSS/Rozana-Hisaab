@@ -11,6 +11,7 @@ interface HeaderProps {
   onToggleLanguage: () => void;
   dir: 'ltr' | 'rtl';
   profile: UserProfile | null;
+  userMetadata?: Record<string, unknown>;
   onAvatarChange: (file: File) => Promise<void>;
   onImportBank: () => void;
   onLogout: () => void;
@@ -31,6 +32,7 @@ export function Header({
   onToggleLanguage,
   dir,
   profile,
+  userMetadata,
   onAvatarChange,
   onImportBank,
   onLogout,
@@ -40,6 +42,10 @@ export function Header({
   const [avatarError, setAvatarError] = useState<string | null>(null);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const displayName = profile?.name ?? tr('userName', language);
+  const avatar =
+    profile?.avatar ??
+    (typeof userMetadata?.avatar_url === 'string' ? userMetadata.avatar_url : null) ??
+    (typeof userMetadata?.picture === 'string' ? userMetadata.picture : null);
   const initials = profile ? getInitials(profile.name, language) : language === 'ur' ? 'م' : 'MH';
   
   // Initialize Push Notifications Hook
@@ -83,9 +89,9 @@ export function Header({
             className="relative group shrink-0"
             aria-label="Change profile photo"
           >
-            {profile?.avatar ? (
+            {avatar ? (
               <div className="w-11 h-11 rounded-full overflow-hidden border-2 border-slate-800 shadow-lg shadow-emerald-500/20">
-                <img src={profile.avatar} alt={displayName} className="w-full h-full object-cover" />
+                <img src={avatar} alt={displayName} className="w-full h-full object-cover" />
               </div>
             ) : (
               <div className="w-11 h-11 rounded-full bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center text-white font-bold text-sm shadow-lg shadow-emerald-500/20 group-hover:ring-2 group-hover:ring-emerald-400/50 transition-all">
