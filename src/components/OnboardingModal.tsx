@@ -1,34 +1,55 @@
-import { useState, useRef } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { Camera, Check, User, Sparkles, Languages } from 'lucide-react';
 import type { Language } from '@/types';
 import { tr } from '@/lib/i18n';
-import type { UserProfile } from '@/hooks/useProfile';
+import { validateAvatarFile } from '@/lib/avatar';
 
 interface OnboardingModalProps {
   language: Language;
   dir: 'ltr' | 'rtl';
   onToggleLanguage: () => void;
-  onComplete: (profile: UserProfile) => void;
+  onComplete: (profile: { name: string; avatarFile: File | null }) => Promise<void>;
 }
 
 export function OnboardingModal({ language, dir, onToggleLanguage, onComplete }: OnboardingModalProps) {
   const [name, setName] = useState('');
-  const [avatar, setAvatar] = useState<string | null>(null);
+  const [avatarFile, setAvatarFile] = useState<File | null>(null);
+  const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    return () => {
+      if (avatarPreview) URL.revokeObjectURL(avatarPreview);
+    };
+  }, [avatarPreview]);
 
   const handlePhoto = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      setAvatar(reader.result as string);
-    };
-    reader.readAsDataURL(file);
+    e.target.value = '';
+    const validationError = validateAvatarFile(file);
+    if (validationError) {
+      setError(validationError);
+      return;
+    }
+
+    setError(null);
+    setAvatarFile(file);
+    setAvatarPreview(URL.createObjectURL(file));
   };
 
-  const handleSubmit = () => {
-    if (!name.trim()) return;
-    onComplete({ name: name.trim(), avatar });
+  const handleSubmit = async () => {
+    if (!name.trim() || submitting) return;
+    setSubmitting(true);
+    setError(null);
+    try {
+      await onComplete({ name: name.trim(), avatarFile });
+    } catch (submitError) {
+      setError(submitError instanceof Error ? submitError.message : 'Could not save your profile.');
+      setSubmitting(false);
+    }
   };
 
   const getInitials = (n: string) => {
@@ -77,7 +98,7 @@ export function OnboardingModal({ language, dir, onToggleLanguage, onComplete }:
           <input
             ref={fileRef}
             type="file"
-            accept="image/*"
+            accept="image/jpeg,image/png,image/webp"
             onChange={handlePhoto}
             className="hidden"
           />
@@ -85,9 +106,9 @@ export function OnboardingModal({ language, dir, onToggleLanguage, onComplete }:
             onClick={() => fileRef.current?.click()}
             className="relative group"
           >
-            {avatar ? (
+            {avatarPreview ? (
               <div className="w-24 h-24 rounded-full overflow-hidden border-4 border-slate-800 shadow-xl">
-                <img src={avatar} alt="Profile" className="w-full h-full object-cover" />
+                <img src={avatarPreview} alt="Profile" className="w-full h-full object-cover" />
               </div>
             ) : (
               <div className="w-24 h-24 rounded-full bg-slate-800 border-4 border-slate-800 flex items-center justify-center shadow-xl group-hover:border-emerald-500/50 transition-colors">
@@ -102,6 +123,11 @@ export function OnboardingModal({ language, dir, onToggleLanguage, onComplete }:
             {tr('onboardingPhotoOptional', language)}
           </p>
         </div>
+        {error && (
+          <p role="alert" className="mb-4 text-center text-sm text-rose-400">
+            {error}
+          </p>
+        )}
 
         {/* Name input */}
         <div className="w-full mb-6">
@@ -130,10 +156,10 @@ export function OnboardingModal({ language, dir, onToggleLanguage, onComplete }:
         {/* Create Account button */}
         <button
           onClick={handleSubmit}
-          disabled={!name.trim()}
+          disabled={!name.trim() || submitting}
           className="w-full py-4 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-600 text-white font-bold text-sm hover:from-emerald-400 hover:to-teal-500 transition-all active:scale-[0.98] shadow-lg shadow-emerald-500/20 disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none flex items-center justify-center gap-2"
         >
-          {tr('onboardingCreate', language)}
+          {submitting ? 'Saving...' : tr('onboardingCreate', language)}
         </button>
 
         <p className="text-slate-600 text-xs mt-4 text-center">

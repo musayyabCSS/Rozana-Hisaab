@@ -49,7 +49,7 @@ function App() {
     onboarded,
     loading: loadingProfile,
     saveProfile,
-    updateProfile,
+    uploadAvatar,
   } = useProfile(session?.user.id);
   const [activeModal, setActiveModal] = useState<ModalType>(null);
   const [feedFilter, setFeedFilter] = useState<'all' | 'income' | 'expense'>('all');
@@ -237,10 +237,11 @@ function App() {
 
   // --- EXISTING CALLBACKS ---
   const handleOnboardingComplete = useCallback(
-    (p: { name: string; avatar: string | null }) => {
-      saveProfile(p);
+    async (p: { name: string; avatarFile: File | null }) => {
+      const avatar = p.avatarFile ? await uploadAvatar(p.avatarFile) : null;
+      await saveProfile({ name: p.name, avatar });
     },
-    [saveProfile],
+    [saveProfile, uploadAvatar],
   );
 
   const handleSaveTransaction = useCallback(
@@ -375,7 +376,9 @@ function App() {
         onToggleLanguage={toggleLanguage}
         dir={dir}
         profile={profile}
-        onAvatarChange={(avatar) => updateProfile({ avatar })}
+        onAvatarChange={async (file) => {
+          await uploadAvatar(file);
+        }}
         onImportBank={() => setActiveModal('bank')}
         onLogout={handleLogout}
         userId={session?.user?.id}

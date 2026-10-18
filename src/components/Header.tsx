@@ -1,16 +1,17 @@
-import { useRef } from 'react';
+import { useRef, useState } from 'react';
 import { Languages, Camera, FileUp, LogOut, Bell, BellRing } from 'lucide-react';
 import type { Language } from '@/types';
 import { tr } from '@/lib/i18n';
 import type { UserProfile } from '@/hooks/useProfile';
 import { usePushNotifications } from '@/hooks/usePushNotifications';
+import { validateAvatarFile } from '@/lib/avatar';
 
 interface HeaderProps {
   language: Language;
   onToggleLanguage: () => void;
   dir: 'ltr' | 'rtl';
   profile: UserProfile | null;
-  onAvatarChange: (avatar: string) => void;
+  onAvatarChange: (file: File) => Promise<void>;
   onImportBank: () => void;
   onLogout: () => void;
   userId?: string; // Passed from App.tsx session.user.id
@@ -36,21 +37,33 @@ export function Header({
   userId,
 }: HeaderProps) {
   const fileRef = useRef<HTMLInputElement>(null);
+  const [avatarError, setAvatarError] = useState<string | null>(null);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const displayName = profile?.name ?? tr('userName', language);
   const initials = profile ? getInitials(profile.name, language) : language === 'ur' ? 'م' : 'MH';
   
   // Initialize Push Notifications Hook
   const { isSubscribed, subscribeToPush, loading } = usePushNotifications(userId);
 
-  const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handlePhotoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      onAvatarChange(reader.result as string);
-    };
-    reader.readAsDataURL(file);
+    const validationError = validateAvatarFile(file);
     e.target.value = '';
+    if (validationError) {
+      setAvatarError(validationError);
+      return;
+    }
+
+    setAvatarError(null);
+    setUploadingAvatar(true);
+    try {
+      await onAvatarChange(file);
+    } catch (error) {
+      setAvatarError(error instanceof Error ? error.message : 'Could not upload profile photo.');
+    } finally {
+      setUploadingAvatar(false);
+    }
   };
 
   return (
@@ -60,12 +73,13 @@ export function Header({
           <input
             ref={fileRef}
             type="file"
-            accept="image/*"
+            accept="image/jpeg,image/png,image/webp"
             onChange={handlePhotoChange}
             className="hidden"
           />
           <button
             onClick={() => fileRef.current?.click()}
+            disabled={uploadingAvatar}
             className="relative group shrink-0"
             aria-label="Change profile photo"
           >
@@ -149,6 +163,11 @@ export function Header({
           </button>
         </div>
       </div>
+      {avatarError && (
+        <p role="alert" className="border-t border-rose-500/20 px-4 py-2 text-center text-xs text-rose-300">
+          {avatarError}
+        </p>
+      )}
     </header>
   );
 }

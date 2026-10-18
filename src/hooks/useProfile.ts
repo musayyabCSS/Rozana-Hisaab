@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import type { User } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
+import { getAvatarFileExtension, validateAvatarFile } from '@/lib/avatar';
 
 export interface UserProfile {
   name: string;
@@ -142,35 +143,39 @@ export function useProfile(activeUserId?: string) {
     setOnboarded(true);
   }, []);
 
-  const updateProfile = useCallback(async (updates: Partial<UserProfile>) => {
-    const updated = profile ? { ...profile, ...updates } : { name: 'User', avatar: null, ...updates };
+  const uploadAvatar = useCallback(async (file: File) => {
+    const validationError = validateAvatarFile(file);
+    if (validationError) throw new Error(validationError);
+
+    const extension = getAvatarFileExtension(file);
+    if (!extension) throw new Error('Choose a JPEG, PNG, or WebP image.');
+
+    const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+    if (sessionError) throw sessionError;
+    const user = session?.user;
+    if (!user || (activeUserId && user.id !== activeUserId)) {
+      throw new Error('Could not confirm the active user. Please sign in again.');
+    }
+
+    const path = `${user.id}/avatar.${extension}`;
+    const { error: uploadError } = await supabase.storage
+      .from('avatars')
+      .upload(path, file, { upsert: true, contentType: file.type });
+    if (uploadError) throw uploadError;
+
+    const { data } = supabase.storage.from('avatars').getPublicUrl(path);
+    const publicUrl = `${data.publicUrl}?t=${Date.now()}`;
+    const updated = { ...(profile ?? { name: 'User', avatar: null }), avatar: publicUrl };
+
     setProfile(updated);
-    if (activeUserId) {
-      writeCachedProfile(activeUserId, updated);
-    }
+    writeCachedProfile(user.id, updated);
 
-    if (updates.avatar !== undefined) {
-      try {
-        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-        if (sessionError) throw sessionError;
-        const user = session?.user;
-        if (!user || (activeUserId && user.id !== activeUserId)) {
-          console.warn('Could not confirm the active user; profile photo remains cached on this device.');
-          return;
-        }
-        if (!activeUserId) writeCachedProfile(user.id, updated);
+    const { error: updateError } = await supabase.auth.updateUser({
+      data: { avatar_url: publicUrl },
+    });
+    if (updateError) throw updateError;
 
-        const { error } = await supabase.auth.updateUser({
-          data: { avatar_url: updates.avatar },
-        });
-        if (error) throw error;
-      } catch (error) {
-        console.warn(
-          'Could not save profile photo to Supabase; the photo remains cached on this device.',
-          error,
-        );
-      }
-    }
+    return publicUrl;
   }, [activeUserId, profile]);
 
   return {
@@ -178,7 +183,7 @@ export function useProfile(activeUserId?: string) {
     onboarded,
     loading,
     saveProfile,
-    updateProfile,
+    uploadAvatar,
     refetchProfile: loadProfile,
   };
 }
