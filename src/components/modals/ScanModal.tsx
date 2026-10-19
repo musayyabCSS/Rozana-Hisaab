@@ -151,6 +151,7 @@ export function ScanModal({ open, onClose, language, dir, onSave }: ScanModalPro
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const cameraRequestRef = useRef(0);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const categories =
     extractedData.type === 'income' ? INCOME_CATEGORIES : EXPENSE_CATEGORIES;
@@ -164,16 +165,21 @@ export function ScanModal({ open, onClose, language, dir, onSave }: ScanModalPro
   };
 
   const stopCamera = useCallback(() => {
+    cameraRequestRef.current += 1;
     if (streamRef.current) {
       streamRef.current.getTracks().forEach((track) => {
         track.stop();
       });
       streamRef.current = null;
     }
+    if (videoRef.current) {
+      videoRef.current.srcObject = null;
+    }
   }, []);
 
   const startCamera = useCallback(async () => {
     stopCamera();
+    const requestId = ++cameraRequestRef.current;
     setCameraError(null);
 
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
@@ -183,13 +189,13 @@ export function ScanModal({ open, onClose, language, dir, onSave }: ScanModalPro
 
     try {
       const mediaStream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          facingMode: { ideal: 'environment' },
-          width: { ideal: 1280 },
-          height: { ideal: 720 },
-        },
+        video: { facingMode: { ideal: 'environment' } },
       });
 
+      if (requestId !== cameraRequestRef.current) {
+        mediaStream.getTracks().forEach((track) => track.stop());
+        return;
+      }
       streamRef.current = mediaStream;
 
       if (videoRef.current) {
@@ -201,9 +207,31 @@ export function ScanModal({ open, onClose, language, dir, onSave }: ScanModalPro
         'Camera access error:',
         err instanceof Error ? err.message : String(err),
       );
-      setCameraError('Could not start camera. Upload a file or photo instead.');
+      if (requestId !== cameraRequestRef.current) return;
+
+      const errorName = err instanceof Error ? err.name : '';
+      const isUrdu = language === 'ur';
+      if (['NotAllowedError', 'PermissionDeniedError', 'SecurityError'].includes(errorName)) {
+        setCameraError(
+          isUrdu
+            ? 'کیمرے کی اجازت نہیں ہے۔ براہ کرم ایپ کی ترتیبات میں کیمرے تک رسائی کی اجازت دیں۔'
+            : 'Camera permission denied. Please allow camera access in App Settings.',
+        );
+      } else if (['NotFoundError', 'DevicesNotFoundError'].includes(errorName)) {
+        setCameraError(
+          isUrdu
+            ? 'اس ڈیوائس پر کیمرہ دستیاب نہیں ہے۔ اس کے بجائے تصویر اپ لوڈ کریں۔'
+            : 'No camera hardware was found. Upload a file or photo instead.',
+        );
+      } else {
+        setCameraError(
+          isUrdu
+            ? 'کیمرہ شروع نہیں ہو سکا۔ تصویر اپ لوڈ کریں یا ایپ کی اجازتیں چیک کریں۔'
+            : 'Could not start camera. Check app permissions or upload a file or photo instead.',
+        );
+      }
     }
-  }, [stopCamera]);
+  }, [language, stopCamera]);
 
   useEffect(() => {
     if (open && step === 'capture' && !capturedImage) {

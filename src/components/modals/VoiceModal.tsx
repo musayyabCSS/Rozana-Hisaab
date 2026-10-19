@@ -123,6 +123,7 @@ export function VoiceModal({ open, onClose, language, dir, onSave }: VoiceModalP
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const microphoneRequestRef = useRef(0);
 
   const releaseMicrophone = useCallback(() => {
     if (streamRef.current) {
@@ -135,6 +136,7 @@ export function VoiceModal({ open, onClose, language, dir, onSave }: VoiceModalP
   }, []);
 
   const cleanup = useCallback(() => {
+    microphoneRequestRef.current += 1;
     if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
       mediaRecorderRef.current.stop();
@@ -149,8 +151,8 @@ export function VoiceModal({ open, onClose, language, dir, onSave }: VoiceModalP
   }, [open, cleanup]);
 
   useEffect(() => {
-    return () => { releaseMicrophone(); };
-  }, [releaseMicrophone]);
+    return cleanup;
+  }, [cleanup]);
 
   const startRecording = async () => {
     setError(null);
@@ -158,8 +160,16 @@ export function VoiceModal({ open, onClose, language, dir, onSave }: VoiceModalP
     setParsed(null);
     setRecordSeconds(0);
     setPhase('recording');
+    const requestId = ++microphoneRequestRef.current;
     try {
+      if (!navigator.mediaDevices?.getUserMedia) {
+        throw new Error('Microphone access is not supported');
+      }
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      if (requestId !== microphoneRequestRef.current || !open) {
+        stream.getTracks().forEach((track) => track.stop());
+        return;
+      }
       streamRef.current = stream;
       const mimeType = pickMimeType();
       const recorder = mimeType
@@ -175,10 +185,23 @@ export function VoiceModal({ open, onClose, language, dir, onSave }: VoiceModalP
       timerRef.current = setInterval(() => setRecordSeconds((s) => s + 1), 1000);
     } catch (err) {
       console.error('Mic access failed:', err);
+      if (requestId !== microphoneRequestRef.current) return;
+      releaseMicrophone();
       setPhase('idle');
+      const errorName = err instanceof Error ? err.name : '';
+      const permissionDenied = ['NotAllowedError', 'PermissionDeniedError', 'SecurityError'].includes(errorName);
+      const microphoneMissing = ['NotFoundError', 'DevicesNotFoundError'].includes(errorName);
       const msg = language === 'ur'
-        ? 'براہ کرم سفاری کی سیٹنگز میں مائیکروفون تک رسائی کی اجازت دیں۔'
-        : 'Please allow microphone access in Safari settings.';
+        ? permissionDenied
+          ? 'مائیکروفون تک رسائی ضروری ہے۔ براہ کرم Android ایپ کی معلومات یا براؤزر کی ترتیبات میں مائیکروفون کی اجازت دیں۔'
+          : microphoneMissing
+            ? 'مائیکروفون دستیاب نہیں ہے۔'
+            : 'مائیکروفون شروع نہیں ہو سکا۔ مائیکروفون اور ایپ کی اجازتیں چیک کریں۔'
+        : permissionDenied
+          ? 'Microphone access is required. Please grant permission in Android App Info or your browser settings.'
+          : microphoneMissing
+            ? 'No microphone is available on this device.'
+            : 'Could not start the microphone. Check microphone availability and app permissions.';
       setError(msg);
     }
   };
