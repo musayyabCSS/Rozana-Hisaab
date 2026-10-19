@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect, useRef, type TouchEvent } from 'react';
+import { App as CapApp } from '@capacitor/app';
 import { supabase } from '@/lib/supabase';
 import type { Session } from '@supabase/supabase-js';
 import { Auth } from '@/components/Auth';
@@ -220,6 +221,63 @@ function App() {
     });
 
     return () => subscription.unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    let isMounted = true;
+    let removeListener: (() => Promise<void>) | undefined;
+
+    const handleOAuthCallback = async (url: string) => {
+      if (!url.includes('google-auth')) return;
+
+      try {
+        const callbackUrl = new URL(url);
+        const hashParams = new URLSearchParams(callbackUrl.hash.slice(1));
+        const code = callbackUrl.searchParams.get('code') ?? hashParams.get('code');
+
+        if (code) {
+          const { error } = await supabase.auth.exchangeCodeForSession(code);
+          if (error) throw error;
+          return;
+        }
+
+        const accessToken =
+          hashParams.get('access_token') ?? callbackUrl.searchParams.get('access_token');
+        const refreshToken =
+          hashParams.get('refresh_token') ?? callbackUrl.searchParams.get('refresh_token');
+        if (accessToken && refreshToken) {
+          const { error } = await supabase.auth.setSession({
+            access_token: accessToken,
+            refresh_token: refreshToken,
+          });
+          if (error) throw error;
+        }
+      } catch (error) {
+        console.error('Could not restore session from Google OAuth deep link:', error);
+      }
+    };
+
+    void CapApp.addListener('appUrlOpen', ({ url }) => handleOAuthCallback(url)).then((listener) => {
+      if (isMounted) {
+        removeListener = () => listener.remove();
+      } else {
+        void listener.remove();
+      }
+    }).catch((error: unknown) => {
+      console.error('Could not register Google OAuth deep link listener:', error);
+    });
+
+    void CapApp.getLaunchUrl().then((launch) => {
+      if (launch?.url) return handleOAuthCallback(launch.url);
+    }).catch((error: unknown) => {
+      console.error('Could not read initial Google OAuth deep link:', error);
+    });
+
+    return () => {
+      isMounted = false;
+      if (removeListener) void removeListener();
+      void CapApp.removeAllListeners();
+    };
   }, []);
 
   useEffect(() => {

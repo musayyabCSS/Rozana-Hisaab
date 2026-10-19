@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Eye, EyeOff } from 'lucide-react';
+import { Capacitor } from '@capacitor/core';
 import { supabase } from '@/lib/supabase';
 
 export function Auth({ initialError }: { initialError?: string | null }) {
@@ -56,7 +57,10 @@ const handleGoogleLogin = async () => {
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
-        redirectTo: window.location.origin,
+        redirectTo: Capacitor.isNativePlatform()
+          ? 'com.cssestimation.rozanahisaab://google-auth'
+          : window.location.origin,
+        skipBrowserRedirect: false,
         queryParams: {
           prompt: 'select_account',
           access_type: 'offline',
