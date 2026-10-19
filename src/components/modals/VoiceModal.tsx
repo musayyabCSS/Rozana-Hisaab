@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { Mic, Square, Check, Pencil, AlertCircle, Loader2, Volume2 } from 'lucide-react';
+import { Languages, Mic, Square, Check, Pencil, AlertCircle, Loader2, Volume2 } from 'lucide-react';
 import { Modal } from '@/components/ui/Modal';
 import type { Language, Category, NewTransaction, TransactionType, PaymentMethod } from '@/types';
 import { tr } from '@/lib/i18n';
@@ -7,6 +7,7 @@ import { CATEGORIES, getCategoryLabel, INCOME_CATEGORIES, EXPENSE_CATEGORIES } f
 import { formatPKR } from '@/lib/format';
 import { isFutureDate } from '@/lib/format';
 import { parseVoice, transcribeAudioWithWhisper } from '@/lib/ai';
+import { useLanguage } from '@/hooks/useLanguage';
 
 interface VoiceModalProps {
   open: boolean;
@@ -107,6 +108,8 @@ function formatTimer(seconds: number): string {
 }
 
 export function VoiceModal({ open, onClose, language, dir, onSave }: VoiceModalProps) {
+  const { language: appLanguage } = useLanguage();
+  const [inputLanguage, setInputLanguage] = useState<Language>(appLanguage);
   const [transcript, setTranscript] = useState('');
   const [parsed, setParsed] = useState<ParsedResult | null>(null);
   const [editing, setEditing] = useState(false);
@@ -124,6 +127,19 @@ export function VoiceModal({ open, onClose, language, dir, onSave }: VoiceModalP
   const chunksRef = useRef<Blob[]>([]);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const microphoneRequestRef = useRef(0);
+  const inputLanguageRef = useRef(inputLanguage);
+
+  const handleInputLanguageChange = (nextLanguage: Language) => {
+    inputLanguageRef.current = nextLanguage;
+    setInputLanguage(nextLanguage);
+  };
+
+  useEffect(() => {
+    if (open) {
+      inputLanguageRef.current = appLanguage;
+      setInputLanguage(appLanguage);
+    }
+  }, [open, appLanguage]);
 
   const releaseMicrophone = useCallback(() => {
     if (streamRef.current) {
@@ -225,14 +241,15 @@ export function VoiceModal({ open, onClose, language, dir, onSave }: VoiceModalP
       return;
     }
     try {
-      const text = await transcribeAudioWithWhisper(blob);
+      const transcriptionLanguage = inputLanguageRef.current;
+      const text = await transcribeAudioWithWhisper(blob, transcriptionLanguage);
       if (!text) {
         setError(language === 'ur' ? 'کوئی آواز نہیں سنی گئی۔ دوبارہ کوشش کریں۔' : 'No speech detected. Please try again.');
         setPhase('idle');
         return;
       }
       setTranscript(text);
-      await analyzeTranscript(text);
+      await analyzeTranscript(text, transcriptionLanguage);
     } catch (err) {
       console.error('Whisper transcription failed:', err);
       setError(language === 'ur' ? 'آواز تبدیل کرنے میں خرابی۔ دوبارہ کوشش کریں۔' : 'Transcription failed. Please try again.');
@@ -242,11 +259,11 @@ export function VoiceModal({ open, onClose, language, dir, onSave }: VoiceModalP
     }
   };
 
-  const analyzeTranscript = async (text: string) => {
+  const analyzeTranscript = async (text: string, transcriptionLanguage: Language) => {
     setPhase('parsing');
     setError(null);
     try {
-      const result = await parseVoice(text);
+      const result = await parseVoice(text, transcriptionLanguage);
       setParsed(result);
       setEditAmount(String(result.amount));
       setEditCategory(result.category);
@@ -320,6 +337,26 @@ export function VoiceModal({ open, onClose, language, dir, onSave }: VoiceModalP
       subtitle={tr('voiceExample', language)}
       dir={dir}
     >
+      <div className="mb-4 flex items-center justify-center gap-2">
+        <Languages size={16} className="text-slate-400" aria-hidden="true" />
+        <div className="inline-flex rounded-lg border border-slate-700 bg-slate-800 p-1">
+          {(['en', 'ur'] as const).map((option) => (
+            <button
+              key={option}
+              type="button"
+              onClick={() => handleInputLanguageChange(option)}
+              aria-pressed={inputLanguage === option}
+              className={`rounded-md px-3 py-1.5 text-xs font-medium transition ${
+                inputLanguage === option
+                  ? 'bg-emerald-500 text-slate-950'
+                  : 'text-slate-300 hover:text-white'
+              }`}
+            >
+              {option === 'en' ? 'English' : 'اردو'}
+            </button>
+          ))}
+        </div>
+      </div>
       {/* Voice visualization area */}
       <div className="flex flex-col items-center py-6">
         <button
@@ -422,7 +459,7 @@ export function VoiceModal({ open, onClose, language, dir, onSave }: VoiceModalP
           />
           {phase === 'transcript' && (
             <button
-              onClick={() => void analyzeTranscript(transcript)}
+              onClick={() => void analyzeTranscript(transcript, inputLanguageRef.current)}
               className="w-full mt-3 py-3 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 text-white font-bold text-sm hover:from-emerald-400 hover:to-teal-500 transition-all active:scale-[0.98]"
             >
               {language === 'ur' ? 'AI سے تجزیہ کریں' : 'Analyze with AI'}

@@ -34,7 +34,14 @@ serve(async (req) => {
       const formData = new FormData();
       formData.append("file", audioBlob, "audio.webm");
       formData.append("model", "whisper-1");
-      formData.append("prompt", "Rozana Hisaab, petrol, karwaya, rashan, bijli ka bill, kharcha, amadani, Shell, PSO, EasyPaisa, JazzCash");
+      const whisperPrompt = typeof body.prompt === "string" && body.prompt.trim()
+        ? body.prompt
+        : "Rozana Hisaab expense tracker: Shell se 5000 ka fuel lia, LESCO electricity bill 25000 pay kia, 1200 ki sabzi li, grocery store, lunch with friends, Careem ride 850, paid, received.";
+      formData.append("prompt", whisperPrompt);
+      formData.append("temperature", "0");
+      if (body.language === "en" || body.language === "ur") {
+        formData.append("language", body.language);
+      }
 
       const whisperRes = await fetch("https://api.openai.com/v1/audio/transcriptions", {
         method: "POST",
@@ -66,7 +73,11 @@ serve(async (req) => {
             {
               role: "system",
               content: `You are an expense parser for a Pakistani ledger app named Rozana Hisaab.
-Parse user speech (English, Urdu, or Roman Urdu like "2500 ka petrol karwaya", "kal 4000 ka rashan liya", "salary mili 60000").
+The selected spoken language is ${body.inputLanguage === "ur" ? "Urdu" : "English"}, but the transcript may contain English, Urdu script, Roman Urdu, or a mixture. Understand code-switching and do not translate or misread Roman Urdu as English.
+Extract the exact numeric transaction amount from spoken numbers and numerals, including common Urdu/Roman Urdu number phrases (for example "pachaas hazar" = 50000) and English number phrases.
+Classify electricity, gas, water, and internet bills as "bills" (Utilities is represented by "bills" in this app). Classify petrol/diesel purchases as "fuel" and groceries/rashan as "groceries".
+Create a concise, descriptive title in English, such as "Electricity Bill" or "Petrol", while preserving a specific merchant or person name when provided.
+Examples: "2500 ka petrol karwaya", "kal 4000 ka rashan liya", "salary mili 60000", "I paid 5,200 for my electricity bill", and "بجلی کا بل پانچ ہزار دو سو ادا کیا".
 Reference today's date: ${today}. If they say "kal", use yesterday. If "parso", day before yesterday.
 Return strictly valid JSON with this exact schema:
 {
