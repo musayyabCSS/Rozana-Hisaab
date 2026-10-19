@@ -1,20 +1,37 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useSyncExternalStore, useEffect, useCallback } from 'react';
 import type { Language } from '@/types';
 
 const STORAGE_KEY = 'rozana-hisaab-lang';
 
+function getSavedLanguage(): Language {
+  return typeof localStorage !== 'undefined' && localStorage.getItem(STORAGE_KEY) === 'ur'
+    ? 'ur'
+    : 'en';
+}
+
+let currentLanguage = getSavedLanguage();
+const listeners = new Set<() => void>();
+
+function subscribe(listener: () => void) {
+  listeners.add(listener);
+  return () => listeners.delete(listener);
+}
+
+function setLanguage(language: Language) {
+  currentLanguage = language;
+  localStorage.setItem(STORAGE_KEY, language);
+  listeners.forEach((listener) => listener());
+}
+
 export function useLanguage() {
-  const [language, setLanguage] = useState<Language>(() => {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    return saved === 'ur' ? 'ur' : 'en';
-  });
+  const language = useSyncExternalStore<Language>(
+    subscribe,
+    () => currentLanguage,
+    () => 'en',
+  );
 
   const toggleLanguage = useCallback(() => {
-    setLanguage((prev) => {
-      const next = prev === 'en' ? 'ur' : 'en';
-      localStorage.setItem(STORAGE_KEY, next);
-      return next;
-    });
+    setLanguage(currentLanguage === 'en' ? 'ur' : 'en');
   }, []);
 
   const dir: 'ltr' | 'rtl' = language === 'ur' ? 'rtl' : 'ltr';

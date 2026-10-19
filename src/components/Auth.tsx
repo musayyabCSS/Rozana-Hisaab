@@ -1,9 +1,13 @@
 import React, { useEffect, useState } from 'react';
-import { Eye, EyeOff } from 'lucide-react';
+import { Eye, EyeOff, Languages } from 'lucide-react';
 import { Capacitor } from '@capacitor/core';
 import { supabase } from '@/lib/supabase';
+import { useLanguage } from '@/hooks/useLanguage';
+import { tr } from '@/lib/i18n';
 
 export function Auth({ initialError }: { initialError?: string | null }) {
+  const { language, toggleLanguage, dir } = useLanguage();
+  const translate = (key: string) => tr(key, language);
   const [showResetForm, setShowResetForm] = useState(false);
   const [resetSent, setResetSent] = useState(false);
   const [email, setEmail] = useState('');
@@ -32,7 +36,7 @@ export function Auth({ initialError }: { initialError?: string | null }) {
       setError(
         resetError instanceof Error
           ? resetError.message
-          : 'Could not send the password reset link.',
+          : translate('authResetError'),
       );
     } finally {
       setLoading(false);
@@ -52,7 +56,7 @@ export function Auth({ initialError }: { initialError?: string | null }) {
     setLoading(false);
   };
 
-const handleGoogleLogin = async () => {
+  const handleGoogleLogin = async () => {
     setError(null);
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
@@ -73,50 +77,71 @@ const handleGoogleLogin = async () => {
       console.error('Error logging in with Google:', error.message);
     }
   };
-  
+
+  const features = [
+    'authFeatureLedgers',
+    'authFeatureVoice',
+    'authFeatureOcr',
+  ];
+
   return (
-    <div className="flex min-h-screen min-h-[100dvh] flex-col items-center justify-center gap-8 bg-slate-950 px-4 pt-[max(1rem,env(safe-area-inset-top))] pb-[max(1rem,env(safe-area-inset-bottom))] text-white">
+    <div dir={dir} className="flex min-h-screen min-h-[100dvh] flex-col items-center justify-center gap-8 bg-slate-950 px-4 pt-[max(1rem,env(safe-area-inset-top))] pb-[max(1rem,env(safe-area-inset-bottom))] text-white">
       <header className="w-full max-w-xl space-y-4 text-center">
         <img
           src="/icon.svg"
-          alt="Rozana Hisaab Logo"
+          alt={translate('authLogoAlt')}
           className="mx-auto h-16 w-16 rounded-2xl shadow-lg shadow-emerald-500/20"
         />
         <h1 className="text-3xl font-bold tracking-tight text-emerald-400">
-          Rozana Hisaab — Smart Expense Tracker
+          {translate('authAppTitle')}
         </h1>
         <p className="text-sm leading-relaxed text-slate-300">
-          Track daily expenses, record voice transactions, and scan bills with AI.
+          {translate('authAppDescription')}
         </p>
-        <ul className="flex flex-wrap justify-center gap-2" aria-label="App features">
-          {['Daily Ledgers', 'Instant Voice Input', 'Receipt & Bill OCR'].map((feature) => (
+        <ul className="flex flex-wrap justify-center gap-2" aria-label={translate('authFeaturesLabel')}>
+          {features.map((feature) => (
             <li
               key={feature}
               className="rounded-full border border-slate-700 bg-slate-900 px-3 py-1.5 text-xs font-medium text-slate-300"
             >
-              {feature}
+              {translate(feature)}
             </li>
           ))}
         </ul>
       </header>
 
       <div className="w-full max-w-sm space-y-4 rounded-2xl border border-slate-800 bg-slate-900 p-6 shadow-xl">
+        <div className="flex justify-end">
+          <button
+            type="button"
+            onClick={toggleLanguage}
+            aria-label={translate('authLanguageLabel')}
+            className="inline-flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm font-medium text-slate-200 transition hover:border-emerald-500 hover:text-emerald-300"
+          >
+            <Languages size={16} aria-hidden="true" />
+            {translate('authLanguageSwitch')}
+          </button>
+        </div>
         <h2 className="text-xl font-bold text-center text-emerald-400">
-          {showResetForm ? 'Reset your password' : isSignUp ? 'Create your account' : 'Welcome back'}
+          {showResetForm
+            ? translate('authResetPassword')
+            : isSignUp
+              ? translate('authCreateAccount')
+              : translate('authWelcomeBack')}
         </h2>
         <p className="text-xs text-slate-400 text-center">
           {showResetForm
-            ? 'Reset your password'
+            ? translate('authResetPassword')
             : isSignUp
-              ? 'Create a new account'
-              : 'Log in to your account'}
+              ? translate('authCreateAccountSubtitle')
+              : translate('authLoginSubtitle')}
         </p>
 
         {showResetForm ? (
           <>
             {resetSent && (
               <div className="p-3 text-sm bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 rounded-lg text-center">
-                If an account exists for this email, a password reset link has been sent. Check your inbox.
+                {translate('authResetSent')}
               </div>
             )}
             {error && (
@@ -124,13 +149,13 @@ const handleGoogleLogin = async () => {
                 {error}
               </div>
             )}
-            <form onSubmit={handlePasswordReset} className="space-y-3">
+            <form onSubmit={handlePasswordReset} className="space-y-3" dir={dir}>
               <input
                 type="email"
-                placeholder="Email address"
+                placeholder={translate('authEmail')}
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="w-full p-3 rounded-lg bg-slate-800 text-white border border-slate-700 focus:outline-none focus:border-emerald-500 text-sm"
+                className={`w-full p-3 rounded-lg bg-slate-800 text-white border border-slate-700 focus:outline-none focus:border-emerald-500 text-sm ${dir === 'rtl' ? 'text-right' : 'text-left'}`}
                 required
               />
               <button
@@ -138,7 +163,7 @@ const handleGoogleLogin = async () => {
                 disabled={loading}
                 className="w-full py-3 bg-emerald-500 hover:bg-emerald-600 font-semibold rounded-lg transition text-slate-950 text-sm disabled:opacity-60"
               >
-                {loading ? 'Sending...' : 'Send Reset Link'}
+                {loading ? translate('authSending') : translate('authSendResetLink')}
               </button>
             </form>
             <button
@@ -150,7 +175,7 @@ const handleGoogleLogin = async () => {
               }}
               className="w-full text-xs text-slate-400 hover:text-white underline text-center pt-2"
             >
-              Back to Log In
+              {translate('authBackToLogin')}
             </button>
           </>
         ) : (
@@ -184,45 +209,45 @@ const handleGoogleLogin = async () => {
               d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
             />
           </svg>
-          Sign in with Google
+          {translate('authGoogle')}
         </button>
 
         <div className="relative flex items-center justify-center my-2">
           <div className="border-t border-slate-800 w-full"></div>
-          <span className="bg-slate-900 px-3 text-xs text-slate-500 uppercase">Or</span>
+          <span className="bg-slate-900 px-3 text-xs text-slate-500 uppercase">{translate('authOr')}</span>
           <div className="border-t border-slate-800 w-full"></div>
         </div>
 
-        <form onSubmit={handleAuth} className="space-y-3">
+        <form onSubmit={handleAuth} className="space-y-3" dir={dir}>
           <input
             type="email"
-            placeholder="Email address"
+            placeholder={translate('authEmail')}
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            className="w-full p-3 rounded-lg bg-slate-800 text-white border border-slate-700 focus:outline-none focus:border-emerald-500 text-sm"
+            className={`w-full p-3 rounded-lg bg-slate-800 text-white border border-slate-700 focus:outline-none focus:border-emerald-500 text-sm ${dir === 'rtl' ? 'text-right' : 'text-left'}`}
             required
           />
           <div className="relative flex items-center">
             <input
               type={showPassword ? 'text' : 'password'}
-              placeholder="Password"
+              placeholder={translate('authPassword')}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full p-3 pr-11 rounded-lg bg-slate-800 text-white border border-slate-700 focus:outline-none focus:border-emerald-500 text-sm"
+              className={`w-full p-3 ${dir === 'rtl' ? 'pl-11 text-right' : 'pr-11 text-left'} rounded-lg bg-slate-800 text-white border border-slate-700 focus:outline-none focus:border-emerald-500 text-sm`}
               required
             />
             <button
               type="button"
               tabIndex={-1}
-              aria-label={showPassword ? 'Hide password' : 'Show password'}
+              aria-label={translate(showPassword ? 'authHidePassword' : 'authShowPassword')}
               onClick={() => setShowPassword((visible) => !visible)}
-              className="absolute right-3 text-slate-400 hover:text-white transition-colors"
+              className={`absolute ${dir === 'rtl' ? 'left-3' : 'right-3'} text-slate-400 hover:text-white transition-colors`}
             >
               {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
             </button>
           </div>
           {!isSignUp && (
-            <div className="text-right">
+            <div className={dir === 'rtl' ? 'text-left' : 'text-right'}>
               <button
                 type="button"
                 onClick={() => {
@@ -231,7 +256,7 @@ const handleGoogleLogin = async () => {
                 }}
                 className="text-xs text-slate-400 hover:text-emerald-400 transition-colors"
               >
-                Forgot Password?
+                {translate('authForgotPassword')}
               </button>
             </div>
           )}
@@ -240,7 +265,11 @@ const handleGoogleLogin = async () => {
             disabled={loading}
             className="w-full py-3 bg-emerald-500 hover:bg-emerald-600 font-semibold rounded-lg transition text-slate-950 text-sm"
           >
-            {loading ? 'Processing...' : isSignUp ? 'Sign Up' : 'Log In'}
+            {loading
+              ? translate('authProcessing')
+              : isSignUp
+                ? translate('authSignup')
+                : translate('authLogin')}
           </button>
         </form>
 
@@ -249,25 +278,25 @@ const handleGoogleLogin = async () => {
           onClick={() => setIsSignUp(!isSignUp)}
           className="w-full text-xs text-slate-400 hover:text-white underline text-center pt-2"
         >
-          {isSignUp ? 'Already have an account? Log In' : "Don't have an account? Sign Up"}
+          {translate(isSignUp ? 'authAlreadyHaveAccount' : 'authNoAccount')}
         </button>
           </>
         )}
       </div>
       <footer className="flex flex-wrap items-center justify-center gap-x-3 gap-y-2 text-xs text-slate-400">
         <a href="/privacy" className="transition-colors hover:text-white">
-          Privacy Policy
+          {translate('authPrivacy')}
         </a>
         <span aria-hidden="true" className="text-slate-600">·</span>
         <a href="/terms" className="transition-colors hover:text-white">
-          Terms of Service
+          {translate('authTerms')}
         </a>
         <span aria-hidden="true" className="text-slate-600">·</span>
         <a
           href="mailto:musayyab@chatsupportservice.com?subject=Rozana%20Hisaab%20Support"
           className="transition-colors hover:text-white"
         >
-          Contact Support
+          {translate('authContact')}
         </a>
       </footer>
     </div>
