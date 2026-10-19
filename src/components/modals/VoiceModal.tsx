@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { Languages, Mic, Square, Check, Pencil, AlertCircle, Loader2, Volume2 } from 'lucide-react';
+import { Mic, Square, Check, Pencil, AlertCircle, Loader2, Volume2 } from 'lucide-react';
 import { Modal } from '@/components/ui/Modal';
 import type { Language, Category, NewTransaction, TransactionType, PaymentMethod } from '@/types';
 import { tr } from '@/lib/i18n';
@@ -7,7 +7,6 @@ import { CATEGORIES, getCategoryLabel, INCOME_CATEGORIES, EXPENSE_CATEGORIES } f
 import { formatPKR } from '@/lib/format';
 import { isFutureDate } from '@/lib/format';
 import { parseVoice, transcribeAudioWithWhisper } from '@/lib/ai';
-import { useLanguage } from '@/hooks/useLanguage';
 
 interface VoiceModalProps {
   open: boolean;
@@ -108,8 +107,6 @@ function formatTimer(seconds: number): string {
 }
 
 export function VoiceModal({ open, onClose, language, dir, onSave }: VoiceModalProps) {
-  const { language: appLanguage } = useLanguage();
-  const [inputLanguage, setInputLanguage] = useState<Language>(appLanguage);
   const [transcript, setTranscript] = useState('');
   const [parsed, setParsed] = useState<ParsedResult | null>(null);
   const [editing, setEditing] = useState(false);
@@ -127,19 +124,8 @@ export function VoiceModal({ open, onClose, language, dir, onSave }: VoiceModalP
   const chunksRef = useRef<Blob[]>([]);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const microphoneRequestRef = useRef(0);
-  const inputLanguageRef = useRef(inputLanguage);
-
-  const handleInputLanguageChange = (nextLanguage: Language) => {
-    inputLanguageRef.current = nextLanguage;
-    setInputLanguage(nextLanguage);
-  };
-
-  useEffect(() => {
-    if (open) {
-      inputLanguageRef.current = appLanguage;
-      setInputLanguage(appLanguage);
-    }
-  }, [open, appLanguage]);
+  const handleAudioReadyRef = useRef<() => Promise<void>>(async () => {});
+  const startRecordingRef = useRef<() => Promise<void>>(async () => {});
 
   const releaseMicrophone = useCallback(() => {
     if (streamRef.current) {
@@ -155,6 +141,7 @@ export function VoiceModal({ open, onClose, language, dir, onSave }: VoiceModalP
     microphoneRequestRef.current += 1;
     if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      mediaRecorderRef.current.onstop = null;
       mediaRecorderRef.current.stop();
     }
     mediaRecorderRef.current = null;
@@ -170,7 +157,7 @@ export function VoiceModal({ open, onClose, language, dir, onSave }: VoiceModalP
     return cleanup;
   }, [cleanup]);
 
-  const startRecording = async () => {
+  const startRecording = useCallback(async () => {
     setError(null);
     setTranscript('');
     setParsed(null);
@@ -195,7 +182,7 @@ export function VoiceModal({ open, onClose, language, dir, onSave }: VoiceModalP
       recorder.ondataavailable = (event) => {
         if (event.data.size > 0) chunksRef.current.push(event.data);
       };
-      recorder.onstop = () => { void handleAudioReady(); };
+      recorder.onstop = () => { void handleAudioReadyRef.current(); };
       mediaRecorderRef.current = recorder;
       recorder.start();
       timerRef.current = setInterval(() => setRecordSeconds((s) => s + 1), 1000);
@@ -207,25 +194,39 @@ export function VoiceModal({ open, onClose, language, dir, onSave }: VoiceModalP
       const errorName = err instanceof Error ? err.name : '';
       const permissionDenied = ['NotAllowedError', 'PermissionDeniedError', 'SecurityError'].includes(errorName);
       const microphoneMissing = ['NotFoundError', 'DevicesNotFoundError'].includes(errorName);
-      const msg = language === 'ur'
-        ? permissionDenied
-          ? 'مائیکروفون تک رسائی ضروری ہے۔ براہ کرم Android ایپ کی معلومات یا براؤزر کی ترتیبات میں مائیکروفون کی اجازت دیں۔'
-          : microphoneMissing
+      const msg = permissionDenied
+        ? language === 'ur'
+          ? 'مائیکروفون کی اجازت ضروری ہے۔ براہ کرم اپنے آلے یا ایپ کی ترتیبات میں مائیکروفون تک رسائی کی اجازت دیں۔'
+          : 'Microphone permission is required. Please allow microphone access in your device or app settings.'
+        : language === 'ur'
+          ? microphoneMissing
             ? 'مائیکروفون دستیاب نہیں ہے۔'
             : 'مائیکروفون شروع نہیں ہو سکا۔ مائیکروفون اور ایپ کی اجازتیں چیک کریں۔'
-        : permissionDenied
-          ? 'Microphone access is required. Please grant permission in Android App Info or your browser settings.'
           : microphoneMissing
             ? 'No microphone is available on this device.'
             : 'Could not start the microphone. Check microphone availability and app permissions.';
       setError(msg);
     }
-  };
+  }, [language, open, releaseMicrophone]);
+
+  startRecordingRef.current = startRecording;
+
+  useEffect(() => {
+    if (!open) return;
+    const timeoutId = window.setTimeout(() => {
+      void startRecordingRef.current();
+    }, 300);
+    return () => window.clearTimeout(timeoutId);
+  }, [open]);
 
   const stopRecording = () => {
     if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
     if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
+      setPhase('transcribing');
       mediaRecorderRef.current.stop();
+    } else if (!mediaRecorderRef.current && phase === 'recording') {
+      microphoneRequestRef.current += 1;
+      setPhase('idle');
     }
     releaseMicrophone();
   };
@@ -241,15 +242,14 @@ export function VoiceModal({ open, onClose, language, dir, onSave }: VoiceModalP
       return;
     }
     try {
-      const transcriptionLanguage = inputLanguageRef.current;
-      const text = await transcribeAudioWithWhisper(blob, transcriptionLanguage);
+      const text = await transcribeAudioWithWhisper(blob);
       if (!text) {
         setError(language === 'ur' ? 'کوئی آواز نہیں سنی گئی۔ دوبارہ کوشش کریں۔' : 'No speech detected. Please try again.');
         setPhase('idle');
         return;
       }
       setTranscript(text);
-      await analyzeTranscript(text, transcriptionLanguage);
+      await analyzeTranscript(text);
     } catch (err) {
       console.error('Whisper transcription failed:', err);
       setError(language === 'ur' ? 'آواز تبدیل کرنے میں خرابی۔ دوبارہ کوشش کریں۔' : 'Transcription failed. Please try again.');
@@ -258,12 +258,13 @@ export function VoiceModal({ open, onClose, language, dir, onSave }: VoiceModalP
       releaseMicrophone();
     }
   };
+  handleAudioReadyRef.current = handleAudioReady;
 
-  const analyzeTranscript = async (text: string, transcriptionLanguage: Language) => {
+  const analyzeTranscript = async (text: string) => {
     setPhase('parsing');
     setError(null);
     try {
-      const result = await parseVoice(text, transcriptionLanguage);
+      const result = await parseVoice(text);
       setParsed(result);
       setEditAmount(String(result.amount));
       setEditCategory(result.category);
@@ -337,26 +338,6 @@ export function VoiceModal({ open, onClose, language, dir, onSave }: VoiceModalP
       subtitle={tr('voiceExample', language)}
       dir={dir}
     >
-      <div className="mb-4 flex items-center justify-center gap-2">
-        <Languages size={16} className="text-slate-400" aria-hidden="true" />
-        <div className="inline-flex rounded-lg border border-slate-700 bg-slate-800 p-1">
-          {(['en', 'ur'] as const).map((option) => (
-            <button
-              key={option}
-              type="button"
-              onClick={() => handleInputLanguageChange(option)}
-              aria-pressed={inputLanguage === option}
-              className={`rounded-md px-3 py-1.5 text-xs font-medium transition ${
-                inputLanguage === option
-                  ? 'bg-emerald-500 text-slate-950'
-                  : 'text-slate-300 hover:text-white'
-              }`}
-            >
-              {option === 'en' ? 'English' : 'اردو'}
-            </button>
-          ))}
-        </div>
-      </div>
       {/* Voice visualization area */}
       <div className="flex flex-col items-center py-6">
         <button
@@ -459,7 +440,7 @@ export function VoiceModal({ open, onClose, language, dir, onSave }: VoiceModalP
           />
           {phase === 'transcript' && (
             <button
-              onClick={() => void analyzeTranscript(transcript, inputLanguageRef.current)}
+              onClick={() => void analyzeTranscript(transcript)}
               className="w-full mt-3 py-3 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 text-white font-bold text-sm hover:from-emerald-400 hover:to-teal-500 transition-all active:scale-[0.98]"
             >
               {language === 'ur' ? 'AI سے تجزیہ کریں' : 'Analyze with AI'}

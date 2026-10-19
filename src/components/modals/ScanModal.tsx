@@ -214,8 +214,8 @@ export function ScanModal({ open, onClose, language, dir, onSave }: ScanModalPro
       if (['NotAllowedError', 'PermissionDeniedError', 'SecurityError'].includes(errorName)) {
         setCameraError(
           isUrdu
-            ? 'کیمرے کی اجازت نہیں ہے۔ براہ کرم ایپ کی ترتیبات میں کیمرے تک رسائی کی اجازت دیں۔'
-            : 'Camera permission denied. Please allow camera access in App Settings.',
+            ? 'کیمرے کی اجازت ضروری ہے۔ براہ کرم اپنے آلے یا ایپ کی ترتیبات میں کیمرے تک رسائی کی اجازت دیں، یا گیلری سے تصویر اپ لوڈ کریں۔'
+            : 'Camera permission is required. Please allow camera access in your device or app settings, or upload a photo from your gallery.',
         );
       } else if (['NotFoundError', 'DevicesNotFoundError'].includes(errorName)) {
         setCameraError(
@@ -226,8 +226,8 @@ export function ScanModal({ open, onClose, language, dir, onSave }: ScanModalPro
       } else {
         setCameraError(
           isUrdu
-            ? 'کیمرہ شروع نہیں ہو سکا۔ تصویر اپ لوڈ کریں یا ایپ کی اجازتیں چیک کریں۔'
-            : 'Could not start camera. Check app permissions or upload a file or photo instead.',
+            ? 'کیمرہ شروع نہیں ہو سکا۔ براہ کرم کیمرے کی اجازتیں چیک کریں یا گیلری سے تصویر اپ لوڈ کریں۔'
+            : 'Camera permission is required. Please allow camera access in your device or app settings, or upload a photo from your gallery.',
         );
       }
     }

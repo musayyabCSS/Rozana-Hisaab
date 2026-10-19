@@ -2,7 +2,7 @@ import { supabase } from './supabase';
 import type { Category, TransactionType, PaymentMethod } from '@/types';
 
 const WHISPER_CONTEXT_PROMPT =
-  'Rozana Hisaab expense tracker: Shell se 5000 ka fuel lia, LESCO electricity bill 25000 pay kia, 1200 ki sabzi li, grocery store, lunch with friends, Careem ride 850, paid, received.';
+  'Rozana Hisaab personal finance ledger: LESCO electricity bill paid do din pehly 20000, parcel ki payment received Adil 5000, Shell se 5000 ka fuel lia, 1200 ki sabzi li, salary received, dukaan ka kharcha, paid, received.';
 
 export interface ScannedReceipt {
   merchant?: string;
@@ -24,7 +24,6 @@ export interface ParsedVoiceResult {
 // 1. Audio Transcription using Whisper via Supabase Edge Function
 export async function transcribeAudioWithWhisper(
   audioBlob: Blob,
-  language?: 'en' | 'ur',
 ): Promise<string> {
   const buffer = await audioBlob.arrayBuffer();
   const bytes = new Uint8Array(buffer);
@@ -39,7 +38,6 @@ export async function transcribeAudioWithWhisper(
       action: 'transcribe',
       audioBase64,
       mimeType: audioBlob.type || 'audio/webm',
-      language,
       prompt: WHISPER_CONTEXT_PROMPT,
     },
   });
@@ -56,16 +54,13 @@ export async function transcribeAudioWithWhisper(
 }
 
 // 2. Parse Voice Transcription Text into Transaction Fields
-export async function parseVoice(
-  text: string,
-  inputLanguage?: 'en' | 'ur',
-): Promise<ParsedVoiceResult> {
-  const today = new Date().toISOString().split('T')[0];
+export async function parseVoice(text: string): Promise<ParsedVoiceResult> {
+  const now = new Date();
+  const today = `Today's Date: ${now.toISOString().split('T')[0]} (${now.toLocaleDateString('en-US', { weekday: 'long' })})`;
   const { data, error } = await supabase.functions.invoke('ai-proxy', {
     body: {
       action: 'parse-voice',
       text,
-      inputLanguage,
       today,
     },
   });

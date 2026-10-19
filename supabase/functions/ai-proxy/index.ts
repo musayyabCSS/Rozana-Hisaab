@@ -36,12 +36,9 @@ serve(async (req) => {
       formData.append("model", "whisper-1");
       const whisperPrompt = typeof body.prompt === "string" && body.prompt.trim()
         ? body.prompt
-        : "Rozana Hisaab expense tracker: Shell se 5000 ka fuel lia, LESCO electricity bill 25000 pay kia, 1200 ki sabzi li, grocery store, lunch with friends, Careem ride 850, paid, received.";
+        : "Rozana Hisaab personal finance ledger: LESCO electricity bill paid do din pehly 20000, parcel ki payment received Adil 5000, Shell se 5000 ka fuel lia, 1200 ki sabzi li, salary received, dukaan ka kharcha, paid, received.";
       formData.append("prompt", whisperPrompt);
       formData.append("temperature", "0");
-      if (body.language === "en" || body.language === "ur") {
-        formData.append("language", body.language);
-      }
 
       const whisperRes = await fetch("https://api.openai.com/v1/audio/transcriptions", {
         method: "POST",
@@ -60,7 +57,10 @@ serve(async (req) => {
 
     // 2. VOICE TEXT PARSING
     if (action === "parse-voice") {
-      const today = body.today || new Date().toISOString().split("T")[0];
+      const now = new Date();
+      const today = typeof body.today === "string"
+        ? body.today
+        : `Today's Date: ${now.toISOString().split("T")[0]} (${now.toLocaleDateString("en-US", { weekday: "long" })})`;
       const chatRes = await fetch("https://api.openai.com/v1/chat/completions", {
         method: "POST",
         headers: {
@@ -73,12 +73,23 @@ serve(async (req) => {
             {
               role: "system",
               content: `You are an expense parser for a Pakistani ledger app named Rozana Hisaab.
-The selected spoken language is ${body.inputLanguage === "ur" ? "Urdu" : "English"}, but the transcript may contain English, Urdu script, Roman Urdu, or a mixture. Understand code-switching and do not translate or misread Roman Urdu as English.
+Understand English, Urdu script, Roman Urdu, and code-switched speech. Do not mistake Roman Urdu for English or require the transcript to use one language consistently.
 Extract the exact numeric transaction amount from spoken numbers and numerals, including common Urdu/Roman Urdu number phrases (for example "pachaas hazar" = 50000) and English number phrases.
-Classify electricity, gas, water, and internet bills as "bills" (Utilities is represented by "bills" in this app). Classify petrol/diesel purchases as "fuel" and groceries/rashan as "groceries".
-Create a concise, descriptive title in English, such as "Electricity Bill" or "Petrol", while preserving a specific merchant or person name when provided.
-Examples: "2500 ka petrol karwaya", "kal 4000 ka rashan liya", "salary mili 60000", "I paid 5,200 for my electricity bill", and "بجلی کا بل پانچ ہزار دو سو ادا کیا".
-Reference today's date: ${today}. If they say "kal", use yesterday. If "parso", day before yesterday.
+${today}
+Calculate relative dates based on Today's Date:
+- "do din pehly" / "2 days ago" -> subtract 2 days.
+- "kal" / "yesterday" -> subtract 1 day.
+- "pandra din baad" / "after 15 days" -> add 15 days.
+- "agle hafte" / "next week" -> add 7 days.
+- If no relative time is mentioned, use Today's Date.
+- Always output date as YYYY-MM-DD.
+Understand Pakistani vernacular and mixed terminology:
+- LESCO/K-Electric/SNGPL indicate utility bills; use category "bills" (the app's Utilities-equivalent category).
+- Careem/Bykea/Fuel/Petrol/Shell indicate transport or fuel; use the closest supported category "fuel".
+- Dukaan/Sauda/Sabzi/Kirana indicate groceries; use category "groceries".
+- Preserve person/merchant names such as Adil/Kashif/Ali/Ahmed in the transaction title.
+Correctly interpret phonetically written English words in Urdu script (e.g., "ڈالری" or "سیلری" means Salary, "ریسیود" means Received, "بل" means Bill).
+For example, classify "Electricity bill 25000" as category "bills", title "Electricity Bill", amount 25000, type "expense". Classify "parcel ki payment received Adil 5000" as income and include Adil in the title.
 Return strictly valid JSON with this exact schema:
 {
   "amount": number,
