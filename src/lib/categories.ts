@@ -7,6 +7,20 @@ interface CategoryMeta {
   label: Record<Language, string>;
 }
 
+interface CategoryDetails extends CategoryMeta {
+  id: string;
+  name: string;
+  color: string;
+}
+
+export const DEFAULT_CATEGORY = {
+  id: 'other',
+  name: 'Other',
+  label: 'Other',
+  emoji: '📦',
+  color: '#64748B',
+} as const;
+
 export const CATEGORIES: Record<Category, CategoryMeta> = {
   salary: { icon: Wallet, emoji: '💵', label: { en: 'Salary', ur: 'تنخواہ' } },
   business: { icon: Briefcase, emoji: '💼', label: { en: 'Business', ur: 'کاروبار' } },
@@ -30,14 +44,37 @@ export const CATEGORIES: Record<Category, CategoryMeta> = {
 export const EXPENSE_CATEGORIES: Category[] = ['transport', 'fuel', 'bills', 'groceries', 'medical', 'udhaar', 'rent', 'school_fee', 'mechanic', 'misc_expense'];
 export const INCOME_CATEGORIES: Category[] = ['salary', 'business', 'freelance', 'rental_income', 'commission', 'loan', 'scholarship'];
 
-export function getCategoryLabel(cat: Category, lang: Language): string {
-  return CATEGORIES[cat].label[lang];
+export function getCategoryDetails(categoryName?: string | null): CategoryDetails | typeof DEFAULT_CATEGORY {
+  const normalized = categoryName?.trim().toLowerCase();
+  if (!normalized) return DEFAULT_CATEGORY;
+
+  const found = Object.entries(CATEGORIES).find(([key, category]) =>
+    key.toLowerCase() === normalized ||
+    category.label.en.toLowerCase() === normalized ||
+    category.label.ur.toLowerCase() === normalized,
+  );
+  if (!found) return DEFAULT_CATEGORY;
+
+  const [id, category] = found;
+  return {
+    ...category,
+    id,
+    name: category.label.en,
+    color: id === 'salary' || INCOME_CATEGORIES.includes(id as Category) ? '#10B981' : '#F43F5E',
+  };
 }
 
-export function getCategoryIcon(cat: Category) {
-  return CATEGORIES[cat].icon;
+export function getCategoryLabel(cat: string | null | undefined, lang: Language): string {
+  const category = getCategoryDetails(cat);
+  if (typeof category.label === 'string') return category.label;
+  return category.label[lang];
 }
 
-export function getCategoryEmoji(cat: Category): string {
-  return CATEGORIES[cat].emoji;
+export function getCategoryIcon(cat: string | null | undefined) {
+  const category = getCategoryDetails(cat);
+  return 'icon' in category ? category.icon : Zap;
+}
+
+export function getCategoryEmoji(cat: string | null | undefined): string {
+  return getCategoryDetails(cat).emoji;
 }

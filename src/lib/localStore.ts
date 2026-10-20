@@ -510,7 +510,24 @@ export async function getPendingMedia(): Promise<PendingMedia[]> {
   const records: PendingMedia[] = [];
   for (const key of await readKeys(PENDING_MEDIA_STORE)) {
     const item = await readRecord<PendingMedia>(PENDING_MEDIA_STORE, key);
-    if (item) records.push(item);
+    if (
+      item &&
+      typeof item.id === 'string' &&
+      item.id === key &&
+      typeof Blob !== 'undefined' &&
+      item.blob instanceof Blob &&
+      item.blob.size > 0 &&
+      (item.type === 'voice' || item.type === 'receipt') &&
+      typeof item.createdAt === 'string' &&
+      typeof item.userId === 'string' &&
+      ['pending_ai', 'processing', 'done', 'failed'].includes(item.status) &&
+      Number.isFinite(item.attempts)
+    ) {
+      records.push(item);
+    } else {
+      console.warn(`Removing invalid pending-media record ${key}.`);
+      await deleteRecord(PENDING_MEDIA_STORE, key);
+    }
   }
   return records;
 }

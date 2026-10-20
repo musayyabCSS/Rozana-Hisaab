@@ -16,6 +16,12 @@ interface ScanModalProps {
 
 const MAX_IMAGE_BASE64_LENGTH = 7_000_000;
 
+function base64ToBlob(base64: string, mimeType: string): Blob {
+  const binary = atob(base64);
+  const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0));
+  return new Blob([bytes], { type: mimeType });
+}
+
 function loadImage(url: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const image = new Image();
@@ -133,6 +139,7 @@ export function ScanModal({ open, onClose, language, dir, onCaptureMedia }: Scan
   const savePhoto = async (blob: Blob) => {
     setProcessing(true);
     setCaptureError(null);
+    stopCamera();
     try {
       const compressedBlob = await downscaleReceiptPhoto(blob);
       const processed = await onCaptureMediaRef.current(compressedBlob);
@@ -191,15 +198,17 @@ export function ScanModal({ open, onClose, language, dir, onCaptureMedia }: Scan
       setProcessing(true);
       setCaptureError(null);
       const photo = await NativeCamera.getPhoto({
-        quality: 88,
+        quality: 70,
+        width: 1200,
+        correctOrientation: true,
+        saveToGallery: false,
         allowEditing: false,
-        resultType: CameraResultType.Uri,
+        resultType: CameraResultType.Base64,
         source,
       });
-      if (!photo.webPath) throw new Error('Native camera returned no local photo path.');
-      const response = await fetch(photo.webPath);
-      if (!response.ok) throw new Error(`Could not read the captured photo (${response.status}).`);
-      const blob = await response.blob();
+      if (!photo.base64String) throw new Error('Native camera returned no image data.');
+      const mimeType = photo.format === 'png' ? 'image/png' : 'image/jpeg';
+      const blob = base64ToBlob(photo.base64String, mimeType);
       await savePhoto(blob);
     } catch (error) {
       console.error('Native camera or gallery selection failed:', error);
@@ -279,7 +288,9 @@ export function ScanModal({ open, onClose, language, dir, onCaptureMedia }: Scan
           <div role="status" className="flex min-h-80 flex-col items-center justify-center text-center">
             {capturedImage && <img src={capturedImage} alt={tr('receiptPhotoAlt', language)} className="mb-4 max-h-56 w-full rounded-xl object-contain" />}
             <p className="text-sm font-semibold text-amber-300">
-              {language === 'ur' ? 'رسید محفوظ ہے، انٹرنیٹ پر تجزیہ ہوگا۔' : 'Receipt saved. It will be analyzed when you are online.'}
+              {language === 'ur'
+                ? 'Internet connect nahi hai. Offline save ho gaya hai.'
+                : '📶 Internet disconnected. Saved locally and will process when you reconnect.'}
             </p>
             <button type="button" onClick={handleClose} className="mt-5 rounded-xl border border-slate-700 px-5 py-2.5 text-sm text-slate-200">
               {language === 'ur' ? 'بند کریں' : 'Close'}

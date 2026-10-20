@@ -55,10 +55,13 @@ function App() {
   } = useTransactions(session?.user.id);
   const {
     pendingMedia,
+    pendingCount,
+    isProcessing: isProcessingMedia,
     queueMedia,
     retryMedia,
     removeMedia,
     deleteMyMedia,
+    clearAllPending,
   } = usePendingMedia(session?.user.id);
   const {
     profile,
@@ -72,6 +75,7 @@ function App() {
   const [captureConsentOpen, setCaptureConsentOpen] = useState(false);
   const [captureRequested, setCaptureRequested] = useState<'voice' | 'scan' | null>(null);
   const [dismissedMediaId, setDismissedMediaId] = useState<string | null>(null);
+  const [realtimeReviewMedia, setRealtimeReviewMedia] = useState<PendingMedia | null>(null);
   const consentAcceptedRef = useRef(
     typeof localStorage !== 'undefined' && localStorage.getItem('rozana-ai-media-consent') === 'true',
   );
@@ -87,11 +91,24 @@ function App() {
   const pullDistanceRef = useRef(0);
   const thresholdReachedRef = useRef(false);
   const reviewMedia =
+    (realtimeReviewMedia?.id !== dismissedMediaId ? realtimeReviewMedia : null) ??
     pendingMedia.find(
       (item) =>
         item.id !== dismissedMediaId &&
         (item.status === 'done' || item.status === 'failed'),
     ) ?? null;
+
+  useEffect(() => {
+    const handleProcessedMedia = (event: Event) => {
+      const mediaEvent = event as CustomEvent<PendingMedia>;
+      if (mediaEvent.detail?.userId === session?.user.id && mediaEvent.detail.transaction) {
+        setDismissedMediaId(null);
+        setRealtimeReviewMedia(mediaEvent.detail);
+      }
+    };
+    window.addEventListener('pending-media-processed', handleProcessedMedia);
+    return () => window.removeEventListener('pending-media-processed', handleProcessedMedia);
+  }, [session?.user.id]);
 
   const requestCapture = (capture: 'voice' | 'scan') => {
     if (consentAcceptedRef.current) {
@@ -136,6 +153,7 @@ function App() {
     }
     await removeMedia(media.id);
     setDismissedMediaId(null);
+    setRealtimeReviewMedia(null);
     return true;
   };
 
@@ -265,11 +283,19 @@ function App() {
     setPullDistance(REFRESH_THRESHOLD);
     setIsRefreshing(true);
     void (async () => {
+      let timeoutId: number | undefined;
       try {
-        await Promise.all([refetchTransactions(), syncProfile()]);
+        const timeout = new Promise<void>((resolve) => {
+          timeoutId = window.setTimeout(resolve, 5000);
+        });
+        await Promise.race([
+          Promise.all([refetchTransactions(), syncProfile()]).then(() => undefined),
+          timeout,
+        ]);
       } catch (error) {
         console.error('Error refreshing dashboard:', error);
       } finally {
+        if (timeoutId !== undefined) window.clearTimeout(timeoutId);
         pullDistanceRef.current = 0;
         setPullDistance(0);
         setIsRefreshing(false);
@@ -533,23 +559,6 @@ function App() {
           Saved offline. Will sync when back online.
         </div>
       )}
-      {pendingMedia.some((item) => item.status === 'pending_ai' || item.status === 'processing') && (
-        <div
-          role="status"
-          aria-live="polite"
-          className="fixed bottom-40 left-1/2 z-40 -translate-x-1/2 rounded-full border border-amber-500/30 bg-slate-900/95 px-4 py-2 text-xs text-amber-300 shadow-xl"
-        >
-          {pendingMedia.some((item) => item.errorKind === 'auth')
-            ? tr('mediaSignInRequired', language)
-            : pendingMedia.some((item) => item.errorKind === 'limit')
-              ? tr('mediaDailyLimit', language)
-              : pendingMedia.some((item) => item.errorKind === 'server')
-                ? tr('mediaRetryLater', language)
-                : navigator.onLine
-                  ? tr('mediaProcessing', language)
-                  : tr('waitingForInternet', language)}
-        </div>
-      )}
       <Header
         language={language}
         onToggleLanguage={toggleLanguage}
@@ -599,6 +608,26 @@ function App() {
           language={language}
           dir={dir}
         />
+        {pendingCount > 0 && isProcessingMedia && (
+          <div
+            role="status"
+            aria-live="polite"
+            className="flex items-center justify-between rounded-xl border border-emerald-500/20 bg-slate-900/90 px-3 py-2 text-xs text-emerald-200"
+          >
+            <span className="flex items-center gap-2">
+              <span className="h-2 w-2 animate-pulse rounded-full bg-emerald-400" />
+              {tr('mediaProcessing', language)}
+            </span>
+            <button
+              type="button"
+              onClick={() => void clearAllPending()}
+              aria-label={language === 'ur' ? 'محفوظ میڈیا کی قطار صاف کریں' : 'Clear pending media'}
+              className="rounded p-1 text-slate-400 hover:bg-slate-800 hover:text-slate-100"
+            >
+              ✕
+            </button>
+          </div>
+        )}
 
         <TransactionFeed
           transactions={transactions}
@@ -706,8 +735,13 @@ function App() {
         onDiscard={(id) => {
           void removeMedia(id);
           setDismissedMediaId(null);
+          setRealtimeReviewMedia(null);
         }}
-        onSave={handleMediaSave}
+        onSave={async (media, transaction) => {
+          const saved = await handleMediaSave(media, transaction);
+          if (saved) setRealtimeReviewMedia(null);
+          return saved;
+        }}
       />
     </div>
   );

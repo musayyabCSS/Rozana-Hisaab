@@ -3,7 +3,7 @@ import { ArrowDownLeft, ArrowUpRight } from 'lucide-react';
 import { Modal } from '@/components/ui/Modal';
 import type { Language, TransactionType, Category, PaymentMethod, NewTransaction } from '@/types';
 import { tr } from '@/lib/i18n';
-import { CATEGORIES, getCategoryLabel, EXPENSE_CATEGORIES, INCOME_CATEGORIES } from '@/lib/categories';
+import { getCategoryDetails, getCategoryLabel, EXPENSE_CATEGORIES, INCOME_CATEGORIES } from '@/lib/categories';
 import { isFutureDate } from '@/lib/format';
 
 interface ManualEntryModalProps {
@@ -129,7 +129,7 @@ export function ManualEntryModal({ open, onClose, language, dir, onSave }: Manua
                   : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
               }`}
             >
-              {CATEGORIES[cat].emoji} {getCategoryLabel(cat, language)}
+              {getCategoryDetails(cat).emoji} {getCategoryLabel(cat, language)}
             </button>
           ))}
         </div>

@@ -4,8 +4,22 @@ import { Modal } from '@/components/ui/Modal';
 import { formatPKR } from '@/lib/format';
 import { tr } from '@/lib/i18n';
 import type { Category, Language, Transaction, TransactionType } from '@/types';
-import { CATEGORIES, EXPENSE_CATEGORIES, getCategoryLabel, INCOME_CATEGORIES } from '@/lib/categories';
+import { EXPENSE_CATEGORIES, getCategoryDetails, getCategoryLabel, INCOME_CATEGORIES } from '@/lib/categories';
 import type { PendingMedia } from '@/lib/localStore';
+
+function createReviewDraft(transaction: Transaction | undefined): Transaction | null {
+  if (!transaction) return null;
+  const availableCategories =
+    transaction.type === 'income' ? INCOME_CATEGORIES : EXPENSE_CATEGORIES;
+  const resolvedCategory = getCategoryDetails(transaction.category).id;
+  const fallbackCategory =
+    transaction.type === 'income' ? 'business' : 'misc_expense';
+  const safeCategory =
+    availableCategories.find((category) => category === resolvedCategory) ??
+    availableCategories.find((category) => category === fallbackCategory) ??
+    availableCategories[0];
+  return { ...transaction, category: safeCategory };
+}
 
 interface PendingMediaReviewModalProps {
   media: PendingMedia | null;
@@ -27,16 +41,14 @@ export function PendingMediaReviewModal({
   const transaction = media?.transaction;
   const isUrdu = language === 'ur';
   const [receiptPreview, setReceiptPreview] = useState<string | null>(null);
-  const [draft, setDraft] = useState<Transaction | null>(transaction ?? null);
+  const [draft, setDraft] = useState<Transaction | null>(() => createReviewDraft(transaction));
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
-  const [categoryPickerOpen, setCategoryPickerOpen] = useState(false);
 
   useEffect(() => {
-    setDraft(transaction ?? null);
+    setDraft(createReviewDraft(transaction));
     setSaving(false);
     setSaveError(null);
-    setCategoryPickerOpen(false);
   }, [media?.id, transaction]);
 
   useEffect(() => {
@@ -112,7 +124,8 @@ export function PendingMediaReviewModal({
           </div>
         </div>
       ) : media && draft ? (
-        <div className="space-y-4">
+        <div className="max-h-[calc(90dvh-7rem)] overflow-y-auto px-1 py-1">
+        <div className="space-y-4 pb-2">
           {media.type === 'receipt' && receiptPreview && (
             <img
               src={receiptPreview}
@@ -170,45 +183,25 @@ export function PendingMediaReviewModal({
             </div>
             <div>
               <span className="mb-1.5 block text-xs text-slate-400">{tr('category', language)}</span>
-              <button
-                type="button"
-                aria-expanded={categoryPickerOpen}
-                aria-controls="review-transaction-category-options"
-                onClick={() => setCategoryPickerOpen((open) => !open)}
-                className="flex w-full items-center justify-between rounded-xl border border-slate-700 bg-[#131B2E] px-3 py-3 text-left text-sm text-slate-100"
-              >
-                <span>{CATEGORIES[draft.category].emoji} {getCategoryLabel(draft.category, language)}</span>
-                <span className="text-emerald-400">{categoryPickerOpen ? '−' : '+'}</span>
-              </button>
-              {categoryPickerOpen && (
-                <div
-                  id="review-transaction-category-options"
-                  className="mt-2 grid max-h-48 grid-cols-2 gap-2 overflow-y-auto rounded-xl border border-slate-700 bg-[#131B2E] p-2"
-                >
-                  {categories.map((category: Category) => {
-                    const selected = category === draft.category;
-                    return (
-                      <button
-                        key={category}
-                        type="button"
-                        aria-pressed={selected}
-                        onClick={() => {
-                          setDraft({ ...draft, category });
-                          setCategoryPickerOpen(false);
-                        }}
-                        className={`rounded-lg border px-2.5 py-2.5 text-left text-xs font-medium transition-colors ${
-                          selected
-                            ? 'border-emerald-400/50 bg-emerald-400/15 text-emerald-200'
-                            : 'border-transparent bg-slate-900/60 text-slate-300 hover:border-slate-600'
-                        }`}
-                      >
-                        <span className="me-1.5">{CATEGORIES[category].emoji}</span>
-                        {getCategoryLabel(category, language)}
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
+              <div className="flex flex-wrap gap-2">
+                {categories.map((category: Category) => (
+                  <button
+                    key={category}
+                    type="button"
+                    aria-pressed={category === draft.category}
+                    onClick={() => setDraft({ ...draft, category })}
+                    className={`rounded-xl px-3 py-2 text-xs font-medium transition-all active:scale-95 ${
+                      category === draft.category
+                        ? draft.type === 'income'
+                          ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/20'
+                          : 'bg-rose-500 text-white shadow-lg shadow-rose-500/20'
+                        : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
+                    }`}
+                  >
+                    {getCategoryDetails(category).emoji} {getCategoryLabel(category, language)}
+                  </button>
+                ))}
+              </div>
             </div>
             <div>
               <label htmlFor="review-transaction-date" className="mb-1.5 block text-xs text-slate-400">{isUrdu ? 'تاریخ' : 'Date'}</label>
@@ -241,6 +234,7 @@ export function PendingMediaReviewModal({
               {isUrdu ? 'منسوخ / حذف کریں' : 'Cancel / Discard'}
             </button>
           </div>
+        </div>
         </div>
       ) : null}
     </Modal>

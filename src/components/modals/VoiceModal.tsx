@@ -3,6 +3,7 @@ import { AlertCircle, Loader2, Mic, Square, Volume2 } from 'lucide-react';
 import { Modal } from '@/components/ui/Modal';
 import type { Language } from '@/types';
 import { tr } from '@/lib/i18n';
+import { AUDIO_BITRATE, getMicrophoneConstraints, pickAudioMimeType } from '@/lib/audioRecorder';
 
 interface VoiceModalProps {
   open: boolean;
@@ -18,27 +19,12 @@ function formatTimer(seconds: number): string {
   return `${String(minutes).padStart(2, '0')}:${String(remainder).padStart(2, '0')}`;
 }
 
-function pickMimeType(): string {
-  const candidates = [
-    'audio/webm;codecs=opus',
-    'audio/ogg;codecs=opus',
-    'audio/webm',
-    'audio/mp4',
-    'audio/mpeg',
-    'audio/aac',
-    'audio/wav',
-  ];
-  for (const type of candidates) {
-    if (typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported(type)) return type;
-  }
-  return '';
-}
-
 const MAX_RECORDING_SECONDS = 60;
 
 export function VoiceModal({ open, onClose, language, dir, onCaptureMedia }: VoiceModalProps) {
   const [recording, setRecording] = useState(false);
   const [processing, setProcessing] = useState(false);
+  const [processingStep, setProcessingStep] = useState(0);
   const [queuedOffline, setQueuedOffline] = useState(false);
   const [recordSeconds, setRecordSeconds] = useState(0);
   const [waitingForInternet, setWaitingForInternet] = useState(false);
@@ -74,14 +60,14 @@ export function VoiceModal({ open, onClose, language, dir, onCaptureMedia }: Voi
       if (!navigator.mediaDevices?.getUserMedia) {
         throw new Error('Microphone access is not supported on this device.');
       }
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const stream = await navigator.mediaDevices.getUserMedia(getMicrophoneConstraints());
       if (requestId !== requestIdRef.current || !openRef.current) {
         stream.getTracks().forEach((track) => track.stop());
         return;
       }
       streamRef.current = stream;
-      const mimeType = pickMimeType();
-      const recorderOptions: MediaRecorderOptions = { audioBitsPerSecond: 32_000 };
+      const mimeType = pickAudioMimeType();
+      const recorderOptions: MediaRecorderOptions = { audioBitsPerSecond: AUDIO_BITRATE };
       if (mimeType) recorderOptions.mimeType = mimeType;
       const recorder = new MediaRecorder(stream, recorderOptions);
       chunksRef.current = [];
@@ -93,6 +79,12 @@ export function VoiceModal({ open, onClose, language, dir, onCaptureMedia }: Voi
           type: recorder.mimeType || mimeType || 'audio/webm',
         });
         chunksRef.current = [];
+        const processingStartedAt = Date.now();
+        setProcessingStep(0);
+        const progressTimer = window.setInterval(() => {
+          const elapsed = Date.now() - processingStartedAt;
+          setProcessingStep(elapsed < 1800 ? 0 : elapsed < 3500 ? 1 : 2);
+        }, 150);
         void onCaptureMediaRef.current(blob).then((processed) => {
           if (!processed) {
             setQueuedOffline(true);
@@ -104,7 +96,9 @@ export function VoiceModal({ open, onClose, language, dir, onCaptureMedia }: Voi
             ? 'لین دین کا تجزیہ نہیں ہو سکا۔ دوبارہ کوشش کریں۔'
             : 'Could not analyze the transaction. Please try again.');
         }).finally(() => {
+          window.clearInterval(progressTimer);
           setProcessing(false);
+          setProcessingStep(0);
           setRecording(false);
           releaseMicrophone();
         });
@@ -170,6 +164,7 @@ export function VoiceModal({ open, onClose, language, dir, onCaptureMedia }: Voi
     setRecording(false);
     if (recorderRef.current?.state === 'recording') {
       setProcessing(true);
+      setProcessingStep(0);
       recorderRef.current.stop();
     } else {
       requestIdRef.current += 1;
@@ -214,13 +209,19 @@ export function VoiceModal({ open, onClose, language, dir, onCaptureMedia }: Voi
               <Loader2 size={34} className="animate-spin text-emerald-300" />
             </div>
             <p className="mt-5 animate-pulse text-center text-sm font-semibold text-emerald-200">
-              {language === 'ur' ? 'AI Hisaab tayyar kar raha hai...' : 'Analyzing transaction...'}
+              {processingStep === 0
+                ? language === 'ur' ? '🎤 Audio sun rahe hain...' : '🎤 Transcribing voice note...'
+                : processingStep === 1
+                  ? language === 'ur' ? '🧠 Hisaab samajh rahe hain...' : '🧠 Extracting amounts & categories...'
+                  : '✨ Preparing review...'}
             </p>
           </div>
         ) : queuedOffline ? (
           <div role="status" className="flex min-h-56 flex-col items-center justify-center text-center">
             <p className="text-sm font-semibold text-amber-300">
-              {language === 'ur' ? 'ریکارڈنگ محفوظ ہے، انٹرنیٹ پر تجزیہ ہوگا۔' : 'Recording saved. It will be analyzed when you are online.'}
+              {language === 'ur'
+                ? 'Internet connect nahi hai. Offline save ho gaya hai.'
+                : '📶 Internet disconnected. Saved locally and will process when you reconnect.'}
             </p>
             <button type="button" onClick={handleClose} className="mt-5 rounded-xl border border-slate-700 px-5 py-2.5 text-sm text-slate-200">
               {language === 'ur' ? 'بند کریں' : 'Close'}

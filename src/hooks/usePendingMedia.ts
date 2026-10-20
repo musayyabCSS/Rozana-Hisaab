@@ -111,6 +111,7 @@ async function processMedia(media: PendingMedia): Promise<Transaction> {
 export function usePendingMedia(userId?: string) {
   const [pendingMedia, setPendingMediaState] = useState<PendingMedia[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isProcessing, setIsProcessing] = useState(false);
   const processingRef = useRef(false);
   const processingEpochRef = useRef(0);
   const authPausedRef = useRef(false);
@@ -125,11 +126,30 @@ export function usePendingMedia(userId?: string) {
       return;
     }
     const items = await getPendingMediaForUser(userId);
-    const recovered = items.map((item) =>
+    const cutoff = Date.now() - 30 * 60 * 1000;
+    const validItems: PendingMedia[] = [];
+    for (const item of items) {
+      if (!item || typeof item.id !== 'string') continue;
+      const createdAt = Date.parse(item.createdAt);
+      const isQueued = item.status === 'pending_ai' || item.status === 'processing';
+      if (
+        !(item.blob instanceof Blob) ||
+        item.blob.size === 0 ||
+        item.attempts >= 2 ||
+        !['pending_ai', 'processing', 'done', 'failed'].includes(item.status) ||
+        !Number.isFinite(createdAt) ||
+        (isQueued && createdAt < cutoff)
+      ) {
+        await deletePendingMedia(item.id);
+        continue;
+      }
+      validItems.push(item);
+    }
+    const recovered = validItems.map((item) =>
       item.status === 'processing' ? { ...item, status: 'pending_ai' as const } : item,
     );
-    for (let index = 0; index < items.length; index += 1) {
-      if (items[index].status === 'processing') {
+    for (let index = 0; index < validItems.length; index += 1) {
+      if (validItems[index].status === 'processing') {
         await storePendingMedia(recovered[index]);
       }
     }
@@ -137,19 +157,28 @@ export function usePendingMedia(userId?: string) {
     setLoading(false);
   }, [userId]);
 
-  const updateMedia = useCallback(async (media: PendingMedia) => {
-    await storePendingMedia(media);
+  const updateMedia = useCallback(async (media: PendingMedia, requirePersistence = false) => {
+    let persisted = true;
+    try {
+      await storePendingMedia(media);
+    } catch (error) {
+      persisted = false;
+      console.error('Could not cache processed media locally:', error);
+      if (requirePersistence) throw error;
+    }
     setPendingMediaState((current) => {
       const next = current.filter((item) => item.id !== media.id);
       next.push(media);
       return next.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
     });
+    return persisted;
   }, []);
 
   const processPending = useCallback(async () => {
     const activeUserId = userIdRef.current;
     if (!activeUserId || !navigator.onLine || processingRef.current || authPausedRef.current) return;
     processingRef.current = true;
+    setIsProcessing(true);
     const processingEpoch = processingEpochRef.current;
     try {
       while (navigator.onLine) {
@@ -159,11 +188,17 @@ export function usePendingMedia(userId?: string) {
         const media = items
           .filter((item) =>
             item.status === 'pending_ai' &&
-            item.attempts < 5 &&
+            item.attempts < 2 &&
             (!item.nextRetryAt || Date.parse(item.nextRetryAt) <= now),
           )
           .sort((a, b) => a.createdAt.localeCompare(b.createdAt))[0];
         if (!media) break;
+
+        if (!(media.blob instanceof Blob) || media.blob.size === 0) {
+          await deletePendingMedia(media.id);
+          setPendingMediaState((current) => current.filter((item) => item.id !== media.id));
+          continue;
+        }
 
         await updateMedia({
           ...media,
@@ -182,14 +217,30 @@ export function usePendingMedia(userId?: string) {
             nextRetryAt: undefined,
             transaction,
           });
+          window.dispatchEvent(new CustomEvent<PendingMedia>('pending-media-processed', {
+            detail: {
+              ...media,
+              status: 'done',
+              error: undefined,
+              errorKind: undefined,
+              nextRetryAt: undefined,
+              transaction,
+            },
+          }));
         } catch (error) {
           if (processingEpoch !== processingEpochRef.current) break;
           const aiError = error instanceof AiRequestError ? error : null;
           const kind = aiError?.kind ?? 'server';
-          const attempts = media.attempts + (kind === 'server' ? 1 : 0);
+          const attempts = media.attempts + 1;
           const message = aiError?.message ?? (error instanceof Error ? error.message : String(error));
           const failed = kind === 'too_large' || kind === 'invalid' ||
-            (kind === 'server' && attempts >= 5);
+            attempts >= 2;
+          if (failed) {
+            await deletePendingMedia(media.id);
+            setPendingMediaState((current) => current.filter((item) => item.id !== media.id));
+            if (kind === 'auth') authPausedRef.current = true;
+            break;
+          }
           if (kind === 'auth') authPausedRef.current = true;
           const nextRetryAt = kind === 'limit'
             ? new Date(Date.now() + 30 * 60 * 1000).toISOString()
@@ -215,6 +266,7 @@ export function usePendingMedia(userId?: string) {
       }
     } finally {
       processingRef.current = false;
+      setIsProcessing(false);
     }
   }, [updateMedia]);
 
@@ -277,6 +329,9 @@ export function usePendingMedia(userId?: string) {
     blob: Blob,
   ): Promise<boolean> => {
     if (!userId) throw new Error('Sign in before saving media to this device.');
+    if (!(blob instanceof Blob) || blob.size === 0) {
+      throw new Error('The captured media is empty or invalid.');
+    }
     const item: PendingMedia = {
       id: createId(),
       type,
@@ -288,27 +343,39 @@ export function usePendingMedia(userId?: string) {
       userId,
     };
     if (!navigator.onLine) {
-      await updateMedia(item);
+      await updateMedia(item, true);
       return false;
     }
 
+    processingRef.current = true;
+    setIsProcessing(true);
     try {
       const transaction = await processMedia(item);
-      await updateMedia({
+      const completedItem = {
         ...item,
         status: 'done',
         transaction,
-      });
+      } satisfies PendingMedia;
+      await updateMedia(completedItem);
+      window.dispatchEvent(new CustomEvent<PendingMedia>('pending-media-processed', {
+        detail: completedItem,
+      }));
       return true;
     } catch (error) {
       const aiError = error instanceof AiRequestError ? error : null;
       const kind = aiError?.kind ?? 'server';
       const failed = kind === 'too_large' || kind === 'invalid';
       const message = aiError?.message ?? (error instanceof Error ? error.message : String(error));
+      const attempts = item.attempts + 1;
+      if (failed || attempts >= 2) {
+        await deletePendingMedia(item.id);
+        setPendingMediaState((current) => current.filter((media) => media.id !== item.id));
+        throw error;
+      }
       await updateMedia({
         ...item,
-        status: failed ? 'failed' : 'pending_ai',
-        attempts: kind === 'server' ? 1 : 0,
+        status: 'pending_ai',
+        attempts,
         error: kind === 'limit' || kind === 'auth' ? undefined : message,
         errorKind: kind,
         nextRetryAt: kind === 'limit'
@@ -317,8 +384,12 @@ export function usePendingMedia(userId?: string) {
       });
       if (kind === 'auth') authPausedRef.current = true;
       throw error;
+    } finally {
+      processingRef.current = false;
+      setIsProcessing(false);
+      if (navigator.onLine) void processPending();
     }
-  }, [updateMedia, userId]);
+  }, [processPending, updateMedia, userId]);
 
   const retryMedia = useCallback(async (id: string) => {
     const item = (await getPendingMediaForUser(userId ?? '')).find((media) => media.id === id);
@@ -346,13 +417,27 @@ export function usePendingMedia(userId?: string) {
     setPendingMediaState([]);
   }, []);
 
+  const clearAllPending = useCallback(async () => {
+    processingEpochRef.current += 1;
+    await deleteAllPendingMedia();
+    setPendingMediaState([]);
+    setIsProcessing(false);
+  }, []);
+
+  const pendingCount = pendingMedia.filter(
+    (media) => media.status === 'pending_ai' || media.status === 'processing',
+  ).length;
+
   return {
     pendingMedia,
+    pendingCount,
+    isProcessing,
     loading,
     queueMedia,
     retryMedia,
     removeMedia,
     deleteMyMedia,
+    clearAllPending,
     refresh,
   };
 }
