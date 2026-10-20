@@ -1,13 +1,96 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Privacy</title>
-  </head>
-  <body>
-    <p>When you choose to speak or scan a receipt, that voice clip or photo is sent through our server to OpenAI to extract the text. We do not store it. OpenAI processes it under its own API data terms. Your voice recordings and receipt photos stay on your device only.</p>
-    <p>The text details of each entry (title, amount, category, vendor, items, bill and account numbers) are backed up to your account.</p>
-    <p>You can delete your data from Settings and delete media using Delete my media.</p>
-  </body>
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>Privacy Policy - Rozana Hisaab</title>
+  <meta name="theme-color" content="#0b0f19" />
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; background: #0b0f19; color: #cbd5e1; font-family: system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif; line-height: 1.65; font-size: 14px; padding: 32px 16px; display: flex; justify-content: center; }
+    main { width: 100%; max-width: 760px; background: rgba(15, 23, 42, 0.7); border: 1px solid #1e293b; border-radius: 16px; padding: 28px; }
+    header { display: flex; align-items: center; justify-content: space-between; gap: 12px; border-bottom: 1px solid #1e293b; padding-bottom: 18px; margin-bottom: 24px; }
+    h1 { font-size: 24px; margin: 0; color: #ffffff; }
+    h2 { font-size: 16px; margin: 0 0 8px; color: #ffffff; }
+    .meta { font-size: 12px; color: #94a3b8; margin: 4px 0 0; }
+    .back { font-size: 12px; color: #34d399; text-decoration: none; padding: 6px 12px; border: 1px solid rgba(52, 211, 153, 0.3); border-radius: 8px; white-space: nowrap; }
+    section { margin-bottom: 22px; }
+    p { margin: 0 0 8px; }
+    ul { margin: 8px 0 0; padding-left: 20px; color: #94a3b8; }
+    li { margin-bottom: 4px; }
+    strong { color: #e2e8f0; }
+    a { color: #34d399; }
+    footer { margin-top: 28px; padding-top: 18px; border-top: 1px solid #1e293b; text-align: center; font-size: 12px; color: #64748b; }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <div>
+        <h1>Privacy Policy</h1>
+        <p class="meta">Rozana Hisaab &bull; Last updated: October 2026</p>
+      </div>
+      <a class="back" href="/">&larr; Back to App</a>
+    </header>
+
+    <section>
+      <h2>1. Overview</h2>
+      <p>Rozana Hisaab is committed to protecting your personal information. This Privacy Policy explains what we collect, where it is stored, and who processes it when you use our smart ledger and expense tracking app, on the web and on Android.</p>
+    </section>
+
+    <section>
+      <h2>2. Information We Collect</h2>
+      <p>We collect only what is needed to provide your account and your ledger:</p>
+      <ul>
+        <li><strong>Account information:</strong> your name and email address, provided when you sign in with Google or email.</li>
+        <li><strong>Entry details:</strong> for each transaction, the title, amount, type, category, payment method, date, notes, description, vendor, line items, provider name, bill and account numbers, units consumed, billing month, bill type, and payment status.</li>
+        <li><strong>Voice recordings and receipt photos:</strong> stored on your device only. See section 4 for how they are processed.</li>
+        <li><strong>AI usage counters:</strong> for each AI request we record your account, the type of request (voice or receipt), and the time, so that we can prevent abuse. We do not record the content of the request.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>3. What Stays on Your Device</h2>
+      <p>Your voice recordings and receipt photos are saved on your device and are never uploaded to our database or file storage. Entries made while you are offline, and a cached copy of your entries, are also kept on your device and sync to your account when you are back online. You can remove saved voice recordings and receipt photos at any time using <strong>Delete my media</strong> in Settings. Uninstalling the app also removes the data stored on your device.</p>
+    </section>
+
+    <section>
+      <h2>4. Voice and Receipt Processing (AI)</h2>
+      <p>When you choose to speak or scan a receipt, that voice clip or photo is sent through our server to OpenAI to extract the text. We do not store it. OpenAI processes it under its own API data terms. If you are offline, the recording or photo waits on your device and is sent only after you are back online.</p>
+      <p>The app asks for camera and microphone permission. These are used only when you tap to scan a receipt or record a voice entry.</p>
+    </section>
+
+    <section>
+      <h2>5. Backup and Storage of Entry Text</h2>
+      <p>The text details of each entry listed in section 2, including bill and account numbers, are backed up to your account on Supabase so that you can restore them. They are protected by Row Level Security, which allows only your signed-in account to read or change your records.</p>
+    </section>
+
+    <section>
+      <h2>6. Service Providers</h2>
+      <ul>
+        <li><strong>Supabase:</strong> sign-in, database and server functions.</li>
+        <li><strong>OpenAI:</strong> converts voice clips and receipt photos you choose to send into text, as described in section 4.</li>
+        <li><strong>Google:</strong> sign-in, if you choose Google sign-in.</li>
+        <li><strong>Cloudflare:</strong> hosts the web version of the app.</li>
+      </ul>
+      <p style="margin-top: 8px;">We do not sell, rent, or monetize your personal or financial data, and we do not share it with advertisers.</p>
+    </section>
+
+    <section>
+      <h2>7. Retention and Deletion</h2>
+      <p>Your entry text stays in your account until you delete it or ask us to delete it. You may request permanent deletion of your account and associated transaction history at any time. For privacy questions or deletion requests, please
+        <a href="mailto:musayyab@chatsupportservice.com?subject=Rozana%20Hisaab%20Privacy%20Request">contact support</a>.</p>
+    </section>
+
+    <section>
+      <h2>8. Changes to This Policy</h2>
+      <p>If we change how your data is handled, we will update this page and the date at the top.</p>
+    </section>
+
+    <footer>
+      &copy; 2026 Rozana Hisaab. All rights reserved.
+      <a href="/terms.html">Terms of Service</a>
+    </footer>
+  </main>
+</body>
 </html>
