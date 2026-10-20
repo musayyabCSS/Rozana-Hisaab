@@ -159,8 +159,8 @@ export const t: Dict = {
   cameraPlaceholder: { en: 'Choose Take Photo to use the camera, or choose a photo from your gallery.', ur: 'کیمرہ استعمال کرنے کے لیے تصویر لیں منتخب کریں، یا گیلری سے تصویر منتخب کریں۔' },
   receiptPhotoAlt: { en: 'Receipt photo', ur: 'رسید کی تصویر' },
   receiptStoredOnAnotherDevice: {
-    en: 'Receipt photo is stored on another device.',
-    ur: 'رسید کی تصویر کسی دوسرے آلے پر محفوظ ہے۔',
+    en: 'This receipt image was saved locally on a previous install or device, and is not available on this phone.',
+    ur: 'یہ رسید کی تصویر کسی دوسرے فون یا ایپ کی پچھلی انسٹالیشن میں محفوظ کی گئی تھی، اس لیے آپ اسے اس فون پر نہیں دیکھ سکتے۔',
   },
   capturePhoto: { en: 'Take Photo', ur: 'تصویر لیں' },
   uploadGalleryPhoto: { en: 'Choose a photo', ur: 'گیلری سے تصویر منتخب کریں' },

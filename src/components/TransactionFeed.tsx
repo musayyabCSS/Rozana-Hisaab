@@ -444,10 +444,10 @@ export function TransactionFeed({
         dir={dir}
       >
         <div className="space-y-4">
-          <p className="text-sm leading-relaxed text-slate-300">
+          <p dir={language === 'ur' ? 'rtl' : 'ltr'} className="text-sm leading-relaxed text-slate-300">
             {language === 'ur'
-              ? 'Yeh tasveer is device par dastiyab nahi hai.'
-              : 'This receipt image was saved locally on a previous install or device and is not available on this phone.'}
+              ? 'یہ رسید کی تصویر کسی دوسرے فون یا ایپ کی پچھلی انسٹالیشن میں محفوظ کی گئی تھی، اس لیے آپ اسے اس فون پر نہیں دیکھ سکتے۔'
+              : 'This receipt image was saved locally on a previous install or device, and is not available on this phone.'}
           </p>
           <button
             type="button"
