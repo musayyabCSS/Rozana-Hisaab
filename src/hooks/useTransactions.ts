@@ -2,30 +2,15 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import type { Transaction, NewTransaction } from '@/types';
 import { deleteReceiptImage } from '@/lib/receiptStorage';
+import {
+  clearPendingTransactionOperations,
+  deletePendingTransactionOperation,
+  getPendingTransactionOperations,
+  setPendingTransactionOperation,
+  type PendingTransactionOperation,
+} from '@/lib/localStore';
 
 const CACHE_KEY = 'rozana_transactions_cache';
-const PENDING_KEY = 'rozana_pending_transactions';
-
-type PendingTransaction = Transaction & { is_synced: false };
-
-function getPendingKey(userId: string): string {
-  return `${PENDING_KEY}_${userId}`;
-}
-
-function readPendingTransactions(userId: string): PendingTransaction[] {
-  const stored = localStorage.getItem(getPendingKey(userId));
-  if (!stored) return [];
-
-  const parsed: unknown = JSON.parse(stored);
-  if (!Array.isArray(parsed)) {
-    throw new Error(`Invalid pending transaction queue for user ${userId}`);
-  }
-  return parsed as PendingTransaction[];
-}
-
-function writePendingTransactions(userId: string, transactions: PendingTransaction[]): void {
-  localStorage.setItem(getPendingKey(userId), JSON.stringify(transactions));
-}
 
 function createTransactionId(): string {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
@@ -93,11 +78,24 @@ function getCachedTransactions(userId: string): Transaction[] {
 
 function mergePendingTransactions(
   transactions: Transaction[],
-  pending: PendingTransaction[],
+  pending: PendingTransactionOperation[],
 ): Transaction[] {
-  const transactionIds = new Set(transactions.map((transaction) => transaction.id));
-  const missingPending = pending.filter((transaction) => !transactionIds.has(transaction.id));
-  return [...missingPending, ...transactions];
+  const deleteAll = pending.some((operation) => operation.operation === 'deleteAll');
+  const relevantPending = pending.filter((operation) => operation.operation !== 'deleteAll');
+  const pendingById = new Map(relevantPending.map((operation) => [operation.id, operation]));
+  const merged = (deleteAll ? [] : transactions)
+    .filter((transaction) => pendingById.get(transaction.id)?.operation !== 'delete')
+    .map((transaction) => {
+      const operation = pendingById.get(transaction.id);
+      return operation?.operation === 'upsert' ? operation.transaction : transaction;
+    });
+  const knownIds = new Set(merged.map((transaction) => transaction.id));
+  for (const operation of relevantPending) {
+    if (operation.operation === 'upsert' && !knownIds.has(operation.id)) {
+      merged.unshift(operation.transaction);
+    }
+  }
+  return merged;
 }
 
 export function useTransactions(activeUserId?: string) {
@@ -111,40 +109,58 @@ export function useTransactions(activeUserId?: string) {
     if (syncPromiseRef.current) return syncPromiseRef.current;
 
     const syncPromise = (async () => {
-      const pending = readPendingTransactions(activeUserId);
-      const syncedIds: string[] = [];
+      const pending = (await getPendingTransactionOperations(activeUserId)).sort((first, second) =>
+        first.operation === 'deleteAll' ? -1 : second.operation === 'deleteAll' ? 1 : 0,
+      );
 
-      for (const transaction of pending) {
+      for (const operation of pending) {
         if (typeof navigator !== 'undefined' && !navigator.onLine) break;
 
         try {
-          const { data, error } = await supabase
-            .from('transactions')
-            .upsert(toSupabasePayload(transaction, activeUserId), { onConflict: 'id' })
-            .select()
-            .single();
-          if (error) throw error;
+          if (operation.operation === 'deleteAll') {
+            const { error } = await supabase
+              .from('transactions')
+              .delete()
+              .eq('user_id', activeUserId);
+            if (error) throw error;
+            setTransactions(() => {
+              saveTransactionCache(activeUserId, []);
+              return [];
+            });
+          } else if (operation.operation === 'delete') {
+            const { error } = await supabase
+              .from('transactions')
+              .delete()
+              .eq('id', operation.id)
+              .eq('user_id', activeUserId);
+            if (error) throw error;
+            setTransactions((current) => {
+              const next = current.filter((item) => item.id !== operation.id);
+              saveTransactionCache(activeUserId, next);
+              return next;
+            });
+          } else {
+            const { data, error } = await supabase
+              .from('transactions')
+              .upsert(toSupabasePayload(operation.transaction, activeUserId), { onConflict: 'id' })
+              .select()
+              .single();
+            if (error) throw error;
 
-          syncedIds.push(transaction.id);
-          setTransactions((current) => {
-            const next = current.map((item) =>
-              item.id === transaction.id ? { ...data, is_synced: true } : item,
-            );
-            saveTransactionCache(activeUserId, next);
-            return next;
-          });
+            setTransactions((current) => {
+              const next = current.map((item) =>
+                item.id === operation.id ? { ...data, is_synced: true } : item,
+              );
+              saveTransactionCache(activeUserId, next);
+              return next;
+            });
+          }
+
+          await deletePendingTransactionOperation(activeUserId, operation.id);
         } catch (error) {
-          console.error('Error syncing pending transaction:', error);
-          if (isNetworkError(error)) break;
+          console.error('Error syncing pending transaction operation:', error);
+          if (operation.operation === 'deleteAll' || isNetworkError(error)) break;
         }
-      }
-
-      if (syncedIds.length > 0) {
-        const latestPending = readPendingTransactions(activeUserId);
-        writePendingTransactions(
-          activeUserId,
-          latestPending.filter((transaction) => !syncedIds.includes(transaction.id)),
-        );
       }
     })();
 
@@ -186,7 +202,7 @@ export function useTransactions(activeUserId?: string) {
         ...transaction,
         is_synced: true,
       }));
-      const pending = readPendingTransactions(activeUserId);
+      const pending = await getPendingTransactionOperations(activeUserId);
       const merged = mergePendingTransactions(remoteTransactions, pending);
       setTransactions(merged);
       saveTransactionCache(activeUserId, merged);
@@ -194,7 +210,7 @@ export function useTransactions(activeUserId?: string) {
       console.error('Error fetching transactions:', error);
       try {
         const cached = getCachedTransactions(activeUserId);
-        const pending = readPendingTransactions(activeUserId);
+        const pending = await getPendingTransactionOperations(activeUserId);
         setTransactions(mergePendingTransactions(cached, pending));
       } catch (cacheError) {
         console.error('Could not restore cached transactions:', cacheError);
@@ -229,7 +245,7 @@ export function useTransactions(activeUserId?: string) {
     async (txn: NewTransaction): Promise<Transaction | null> => {
       if (!activeUserId) return null;
 
-      const transaction: PendingTransaction = {
+      const transaction: Transaction & { is_synced: false } = {
         id: txn.id ?? createTransactionId(),
         type: txn.type,
         amount: txn.amount,
@@ -248,11 +264,12 @@ export function useTransactions(activeUserId?: string) {
       };
 
       try {
-        const pending = readPendingTransactions(activeUserId);
-        writePendingTransactions(
-          activeUserId,
-          [...pending.filter((item) => item.id !== transaction.id), transaction],
-        );
+        await setPendingTransactionOperation({
+          id: transaction.id,
+          userId: activeUserId,
+          operation: 'upsert',
+          transaction,
+        });
       } catch (error) {
         console.error('Could not queue transaction on this device:', error);
         alert('Could not save this transaction on your device. Please try again.');
@@ -271,53 +288,18 @@ export function useTransactions(activeUserId?: string) {
       }
 
       try {
-        const { data, error } = await supabase
-          .from('transactions')
-          .upsert(toSupabasePayload(transaction, activeUserId), { onConflict: 'id' })
-          .select()
-          .single();
-        if (error) throw error;
-
-        const currentPending = readPendingTransactions(activeUserId);
-        writePendingTransactions(
-          activeUserId,
-          currentPending.filter((item) => item.id !== transaction.id),
-        );
-        const saved = { ...data, is_synced: true };
-        setTransactions((current) => {
-          const next = current.map((item) => (item.id === transaction.id ? saved : item));
-          saveTransactionCache(activeUserId, next);
-          return next;
-        });
-        return saved;
+        await syncPendingTransactions();
       } catch (error) {
-        if (isNetworkError(error) || (typeof navigator !== 'undefined' && !navigator.onLine)) {
-          console.warn('Transaction saved locally and will sync when online:', error);
-          setOfflineSavedNotice(true);
-          return transaction;
-        }
-
-        console.error('Error adding transaction to Supabase:', error);
-        try {
-          const pending = readPendingTransactions(activeUserId);
-          writePendingTransactions(
-            activeUserId,
-            pending.filter((item) => item.id !== transaction.id),
-          );
-        } catch (queueError) {
-          console.error('Could not remove failed transaction from local queue:', queueError);
-        }
-        setTransactions((current) => {
-          const next = current.filter((item) => item.id !== transaction.id);
-          saveTransactionCache(activeUserId, next);
-          return next;
-        });
-        const message = error instanceof Error ? error.message : 'Unable to save transaction';
-        alert(`Failed to save transaction: ${message}`);
-        return null;
+        console.error('Transaction saved locally and sync is pending:', error);
       }
+      const pending = await getPendingTransactionOperations(activeUserId);
+      if (pending.some((operation) => operation.id === transaction.id)) {
+        setOfflineSavedNotice(true);
+        return transaction;
+      }
+      return { ...transaction, is_synced: true };
     },
-    [activeUserId],
+    [activeUserId, syncPendingTransactions],
   );
 
   const deleteTransaction = useCallback(
@@ -325,26 +307,27 @@ export function useTransactions(activeUserId?: string) {
       if (!activeUserId) return false;
 
       try {
-        const { error } = await supabase
-          .from('transactions')
-          .delete()
-          .eq('id', id)
-          .eq('user_id', activeUserId);
-
-        if (error) throw error;
-
+        await setPendingTransactionOperation({
+          id,
+          userId: activeUserId,
+          operation: 'delete',
+        });
         setTransactions((prev) => {
           const next = prev.filter((transaction) => transaction.id !== id);
           saveTransactionCache(activeUserId, next);
           return next;
         });
-
         try {
           await deleteReceiptImage(id);
         } catch (receiptError) {
           console.error('Error deleting receipt image:', receiptError);
         }
 
+        if (typeof navigator === 'undefined' || navigator.onLine) {
+          await syncPendingTransactions();
+        } else {
+          setOfflineSavedNotice(true);
+        }
         return true;
       } catch (error) {
         console.error('Error deleting transaction:', error);
@@ -352,37 +335,63 @@ export function useTransactions(activeUserId?: string) {
         return false;
       }
     },
-    [activeUserId],
+    [activeUserId, syncPendingTransactions],
   );
+
+  const deleteAllTransactions = useCallback(async (): Promise<void> => {
+    if (!activeUserId) throw new Error('Sign in before deleting account transactions.');
+    await clearPendingTransactionOperations(activeUserId);
+    await setPendingTransactionOperation({
+      id: '__delete_all__',
+      userId: activeUserId,
+      operation: 'deleteAll',
+    });
+    setTransactions([]);
+    saveTransactionCache(activeUserId, []);
+    if (typeof navigator === 'undefined' || navigator.onLine) {
+      await syncPendingTransactions();
+    } else {
+      setOfflineSavedNotice(true);
+    }
+  }, [activeUserId, syncPendingTransactions]);
 
   const updateTransaction = useCallback(
     async (id: string, updates: Partial<NewTransaction>): Promise<boolean> => {
       if (!activeUserId) return false;
 
       try {
-        const { error } = await supabase
-          .from('transactions')
-          .update(updates)
-          .eq('id', id)
-          .eq('user_id', activeUserId);
-
-        if (error) throw error;
-
-        setTransactions((prev) => {
-          const next = prev.map((transaction) =>
-            transaction.id === id ? { ...transaction, ...updates } : transaction,
+        const existing = transactions.find((transaction) => transaction.id === id);
+        if (!existing) return false;
+        const updatedTransaction: Transaction & { is_synced: false } = {
+          ...existing,
+          ...updates,
+          is_synced: false,
+        };
+        await setPendingTransactionOperation({
+          id,
+          userId: activeUserId,
+          operation: 'upsert',
+          transaction: updatedTransaction,
+        });
+        setTransactions((current) => {
+          const next = current.map((transaction) =>
+            transaction.id === id ? updatedTransaction : transaction,
           );
           saveTransactionCache(activeUserId, next);
           return next;
         });
+        if (typeof navigator === 'undefined' || navigator.onLine) {
+          await syncPendingTransactions();
+        } else {
+          setOfflineSavedNotice(true);
+        }
         return true;
       } catch (error) {
         console.error('Error updating transaction:', error);
-        alert('Failed to update transaction.');
         return false;
       }
     },
-    [activeUserId],
+    [activeUserId, syncPendingTransactions, transactions],
   );
 
   return {
@@ -392,6 +401,7 @@ export function useTransactions(activeUserId?: string) {
     addTransaction,
     deleteTransaction,
     updateTransaction,
+    deleteAllTransactions,
     refetch: fetchTransactions,
   };
 }

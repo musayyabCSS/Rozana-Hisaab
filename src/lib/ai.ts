@@ -6,8 +6,15 @@ const WHISPER_CONTEXT_PROMPT =
 
 export interface ScannedReceipt {
   merchant?: string;
-  amount?: number;
+  vendor?: string;
+  provider?: string;
+  title?: string;
+  type?: TransactionType;
+  amount?: number | string;
   date?: string;
+  transaction_date?: string;
+  due_date?: string;
+  units_consumed?: string;
   category?: string;
   notes?: string;
 }

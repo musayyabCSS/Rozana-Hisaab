@@ -1,475 +1,269 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { ArrowDownLeft, ArrowUpRight } from 'lucide-react';
-import type { Category, NewTransaction, Transaction, TransactionType } from '@/types';
-import { CATEGORIES, EXPENSE_CATEGORIES, getCategoryLabel, INCOME_CATEGORIES } from '@/lib/categories';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { AlertCircle, Camera, FileUp, Loader2, RotateCcw } from 'lucide-react';
+import { Capacitor } from '@capacitor/core';
+import { Camera as NativeCamera, CameraResultType, CameraSource } from '@capacitor/camera';
+import { Modal } from '@/components/ui/Modal';
+import type { Language } from '@/types';
 import { tr } from '@/lib/i18n';
-import { saveReceiptImage } from '@/lib/receiptStorage';
-import { isFutureDate } from '@/lib/format';
-import { supabase } from '@/lib/supabase';
 
 interface ScanModalProps {
   open: boolean;
   onClose: () => void;
-  language: string;
-  dir: string;
-  onSave: (txn: NewTransaction) => Promise<Transaction | null>;
+  language: Language;
+  dir: 'ltr' | 'rtl';
+  onCaptureMedia: (blob: Blob) => Promise<void>;
 }
 
-interface ExtractedBillData {
-  title: string;
-  amount: number;
-  type: 'expense' | 'income';
-  category: Category;
-  vendor: string;
-  provider: string;
-  due_date: string;
-  transaction_date: string;
-  units_consumed: string;
-  consumer_number: string;
-  description: string;
-}
-
-function mapCategory(value: unknown): Category {
-  if (typeof value !== 'string') return 'misc_expense';
-  const normalized = value.toLowerCase().trim().replace(/[_-]/g, ' ').replace(/\s+/g, ' ');
-  const mechanicSynonyms = [
-    'mechanic',
-    'maintenance',
-    'car repair',
-    'car maintenance',
-    'workshop',
-    'vehicle',
-    'auto',
-    'automotive',
-    'labour',
-    'spare parts',
-    'parts',
-    'oil change',
-    'labour & parts',
-    'periodic maintenance',
-    'engine oil',
-  ];
-  if (mechanicSynonyms.some((synonym) => normalized.includes(synonym))) {
-    return 'mechanic';
-  }
-
-  const categories: Record<string, Category> = {
-    salary: 'salary',
-    business: 'business',
-    freelance: 'freelance',
-    'rental income': 'rental_income',
-    commission: 'commission',
-    loan: 'loan',
-    scholarship: 'scholarship',
-    fuel: 'fuel',
-    petrol: 'fuel',
-    bills: 'bills',
-    utilities: 'bills',
-    'bills & utilities': 'bills',
-    groceries: 'groceries',
-    grocery: 'groceries',
-    medical: 'medical',
-    udhaar: 'udhaar',
-    rent: 'rent',
-    'school fee': 'school_fee',
-    'misc expense': 'misc_expense',
-    'misc. expense': 'misc_expense',
-  };
-  return categories[normalized] ?? 'misc_expense';
-}
-
-function normalizeReceiptDate(value: unknown): string {
-  if (typeof value !== 'string') return '';
-  const input = value.trim();
-  const isoMatch = input.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
-  const dayFirstMatch = input.match(
-    /^(\d{1,2})[-/ ]([A-Za-z]{3,}|0?\d{1,2})[-/ ,]+(\d{2,4})$/,
-  );
-
-  let year: number;
-  let month: number;
-  let day: number;
-  if (isoMatch) {
-    year = Number(isoMatch[1]);
-    month = Number(isoMatch[2]);
-    day = Number(isoMatch[3]);
-  } else if (dayFirstMatch) {
-    day = Number(dayFirstMatch[1]);
-    const monthText = dayFirstMatch[2];
-    if (/^\d+$/.test(monthText)) {
-      month = Number(monthText);
-    } else {
-      const monthIndex = [
-        'jan', 'feb', 'mar', 'apr', 'may', 'jun',
-        'jul', 'aug', 'sep', 'oct', 'nov', 'dec',
-      ].indexOf(monthText.slice(0, 3).toLowerCase());
-      month = monthIndex + 1;
-    }
-    year = Number(dayFirstMatch[3]);
-    if (year < 100) year += 2000;
-  } else {
-    return '';
-  }
-
-  const date = new Date(Date.UTC(year, month - 1, day));
-  if (
-    !Number.isFinite(date.getTime()) ||
-    date.getUTCFullYear() !== year ||
-    date.getUTCMonth() !== month - 1 ||
-    date.getUTCDate() !== day
-  ) {
-    return '';
-  }
-
-  return `${year.toString().padStart(4, '0')}-${month
-    .toString()
-    .padStart(2, '0')}-${day.toString().padStart(2, '0')}`;
-}
-
-export function ScanModal({ open, onClose, language, dir, onSave }: ScanModalProps) {
-  const [capturedImage, setCapturedImage] = useState<string | null>(null);
+export function ScanModal({ open, onClose, language, dir, onCaptureMedia }: ScanModalProps) {
   const [cameraError, setCameraError] = useState<string | null>(null);
-  const [ocrError, setOcrError] = useState<string | null>(null);
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
-  const [transactionDateCustomized, setTransactionDateCustomized] = useState(false);
-  const [step, setStep] = useState<'capture' | 'review'>('capture');
-
-  const [extractedData, setExtractedData] = useState<ExtractedBillData>({
-    title: '',
-    amount: 0,
-    type: 'expense',
-    category: 'bills',
-    vendor: '',
-    provider: '',
-    due_date: new Date().toISOString().split('T')[0],
-    transaction_date: new Date().toISOString().split('T')[0],
-    units_consumed: '',
-    consumer_number: '',
-    description: '',
-  });
-
+  const [cameraReady, setCameraReady] = useState(false);
+  const [captureError, setCaptureError] = useState<string | null>(null);
+  const [capturedImage, setCapturedImage] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [waitingForInternet, setWaitingForInternet] = useState(false);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
-  const cameraRequestRef = useRef(0);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const categories =
-    extractedData.type === 'income' ? INCOME_CATEGORIES : EXPENSE_CATEGORIES;
-
-  const handleTypeChange = (type: TransactionType) => {
-    setExtractedData({
-      ...extractedData,
-      type,
-      category: type === 'income' ? 'freelance' : 'bills',
-    });
-  };
+  const openRef = useRef(open);
+  const onCaptureMediaRef = useRef(onCaptureMedia);
+  openRef.current = open;
+  onCaptureMediaRef.current = onCaptureMedia;
 
   const stopCamera = useCallback(() => {
-    cameraRequestRef.current += 1;
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach((track) => {
-        track.stop();
-      });
-      streamRef.current = null;
-    }
-    if (videoRef.current) {
-      videoRef.current.srcObject = null;
-    }
+    streamRef.current?.getTracks().forEach((track) => track.stop());
+    streamRef.current = null;
+    setCameraReady(false);
+    if (videoRef.current) videoRef.current.srcObject = null;
   }, []);
 
-  const startCamera = useCallback(async () => {
+  const startCameraRef = useRef<() => Promise<void>>(async () => {});
+  startCameraRef.current = async () => {
     stopCamera();
-    const requestId = ++cameraRequestRef.current;
     setCameraError(null);
-
-    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-      setCameraError('Camera access is not supported on this browser or device.');
+    if (Capacitor.isNativePlatform()) {
+      setCameraReady(true);
       return;
     }
-
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setCameraError(tr('cameraUnavailable', language));
+      return;
+    }
     try {
-      const mediaStream = await navigator.mediaDevices.getUserMedia({
+      const stream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: { ideal: 'environment' } },
       });
-
-      if (requestId !== cameraRequestRef.current) {
-        mediaStream.getTracks().forEach((track) => track.stop());
+      if (!openRef.current) {
+        stream.getTracks().forEach((track) => track.stop());
         return;
       }
-      streamRef.current = mediaStream;
-
+      streamRef.current = stream;
+      setCameraReady(true);
       if (videoRef.current) {
-        videoRef.current.srcObject = mediaStream;
-        await videoRef.current.play().catch(() => {});
+        videoRef.current.srcObject = stream;
+        await videoRef.current.play();
       }
-    } catch (err: unknown) {
-      console.error(
-        'Camera access error:',
-        err instanceof Error ? err.message : String(err),
+    } catch (error) {
+      console.error('Camera access failed:', error);
+      const name = error instanceof Error ? error.name : '';
+      setCameraError(
+        ['NotAllowedError', 'PermissionDeniedError', 'SecurityError'].includes(name)
+          ? tr('cameraPermissionRequired', language)
+          : ['NotFoundError', 'DevicesNotFoundError'].includes(name)
+            ? tr('cameraUnavailable', language)
+            : tr('cameraStartFailed', language),
       );
-      if (requestId !== cameraRequestRef.current) return;
-
-      const errorName = err instanceof Error ? err.name : '';
-      const isUrdu = language === 'ur';
-      if (['NotAllowedError', 'PermissionDeniedError', 'SecurityError'].includes(errorName)) {
-        setCameraError(
-          isUrdu
-            ? 'کیمرے کی اجازت ضروری ہے۔ براہ کرم اپنے آلے یا ایپ کی ترتیبات میں کیمرے تک رسائی کی اجازت دیں، یا گیلری سے تصویر اپ لوڈ کریں۔'
-            : 'Camera permission is required. Please allow camera access in your device or app settings, or upload a photo from your gallery.',
-        );
-      } else if (['NotFoundError', 'DevicesNotFoundError'].includes(errorName)) {
-        setCameraError(
-          isUrdu
-            ? 'اس ڈیوائس پر کیمرہ دستیاب نہیں ہے۔ اس کے بجائے تصویر اپ لوڈ کریں۔'
-            : 'No camera hardware was found. Upload a file or photo instead.',
-        );
-      } else {
-        setCameraError(
-          isUrdu
-            ? 'کیمرہ شروع نہیں ہو سکا۔ براہ کرم کیمرے کی اجازتیں چیک کریں یا گیلری سے تصویر اپ لوڈ کریں۔'
-            : 'Camera permission is required. Please allow camera access in your device or app settings, or upload a photo from your gallery.',
-        );
-      }
     }
-  }, [language, stopCamera]);
+  };
 
   useEffect(() => {
-    if (open && step === 'capture' && !capturedImage) {
-      startCamera();
-    } else {
+    if (open && !capturedImage) void startCameraRef.current();
+    else stopCamera();
+    return stopCamera;
+  }, [capturedImage, open, stopCamera]);
+
+  useEffect(() => () => stopCamera(), [stopCamera]);
+
+  const savePhoto = async (blob: Blob, previewUrl: string) => {
+    setSaving(true);
+    setCaptureError(null);
+    try {
+      await onCaptureMediaRef.current(blob);
+      setCapturedImage(previewUrl);
+      setWaitingForInternet(!navigator.onLine);
       stopCamera();
+    } catch (error) {
+      console.error('Could not save receipt photo locally:', error);
+      setCaptureError(tr('mediaLocalSaveFailed', language));
+      URL.revokeObjectURL(previewUrl);
+    } finally {
+      setSaving(false);
     }
+  };
 
-    return () => {
-      stopCamera();
-    };
-  }, [open, step, capturedImage, startCamera, stopCamera]);
-
-  const handleCapturePhoto = () => {
-    if (!videoRef.current) return;
-
+  const capturePhoto = () => {
+    if (Capacitor.isNativePlatform()) {
+      void chooseNativePhoto(CameraSource.Camera);
+      return;
+    }
     const video = videoRef.current;
+    if (!video) return;
     const canvas = document.createElement('canvas');
     canvas.width = video.videoWidth || 640;
     canvas.height = video.videoHeight || 480;
-
-    const ctx = canvas.getContext('2d');
-    if (ctx) {
-      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-      const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
-      stopCamera();
-      setCapturedImage(dataUrl);
-      processOCR(dataUrl);
+    const context = canvas.getContext('2d');
+    if (!context) {
+      setCaptureError(tr('cameraCaptureFailed', language));
+      return;
     }
-  };
-
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        const dataUrl = event.target?.result as string;
-        stopCamera();
-        setCapturedImage(dataUrl);
-        processOCR(dataUrl);
-      };
-      reader.readAsDataURL(file);
-    }
-  };
-
-  const handleRetake = async () => {
-    stopCamera();
-    setCapturedImage(null);
-    setCameraError(null);
-    setTransactionDateCustomized(false);
-    setStep('capture');
-    await startCamera();
-  };
-
-  const processOCR = async (imageData: string) => {
-    setIsProcessing(true);
-    setOcrError(null);
-    setTransactionDateCustomized(false);
-    try {
-      const { data, error } = await supabase.functions.invoke('ai-proxy', {
-        body: {
-          action: 'receipt',
-          imageBase64: imageData,
-        },
-      });
-
-      if (error) {
-        throw new Error(error.message);
-      }
-
-      if (data?.error) {
-        throw new Error(data.error.message || data.error);
-      }
-
-      const content = data?.choices?.[0]?.message?.content;
-      if (!content) {
-        throw new Error('AI Vision returned an empty response.');
-      }
-
-      const parsed = JSON.parse(content) as Record<string, unknown>;
-      const amount = Number(parsed.amount);
-      const type = parsed.type === 'income' ? 'income' : 'expense';
-      const recognizedCategory = mapCategory(parsed.category);
-      const category: Category =
-        type === 'income'
-          ? 'freelance'
-          : EXPENSE_CATEGORIES.includes(recognizedCategory)
-            ? recognizedCategory
-            : 'misc_expense';
-      const modelTitle = typeof parsed.title === 'string' ? parsed.title.trim() : '';
-      const provider =
-        typeof parsed.provider === 'string' ? parsed.provider.trim() : '';
-      const utilityBill =
-        type === 'expense' &&
-        (category === 'bills' ||
-          /electric|gas|water|internet|utility|lesco|ptcl|sngpl|mepco|k-electric/i.test(
-            `${provider} ${modelTitle}`,
-          ));
-      const parsedVendor =
-        typeof parsed.vendor === 'string' ? parsed.vendor.trim() : '';
-      const genericIncomeTitle =
-        /^(payment received|received payment|income|payment|cash received)$/i;
-      const vendor =
-        parsedVendor ||
-        (type === 'income' && !genericIncomeTitle.test(modelTitle) ? modelTitle : '');
-      const title = utilityBill
-        ? provider || vendor || modelTitle || 'Utility Bill'
-        : type === 'income'
-          ? vendor || (genericIncomeTitle.test(modelTitle) ? 'Freelance Income' : modelTitle)
-          : modelTitle || 'Scanned Receipt';
-
-      const transactionDate =
-        [parsed.transaction_date, parsed.date, parsed.due_date]
-          .map(normalizeReceiptDate)
-          .find(Boolean) || '';
-      const today = new Date().toISOString().split('T')[0];
-      const resolvedTransactionDate = transactionDate || today;
-      const parsedDueDate = normalizeReceiptDate(parsed.due_date);
-      const dueDate =
-        parsedDueDate &&
-        parsedDueDate !== resolvedTransactionDate &&
-        isFutureDate(parsedDueDate)
-          ? parsedDueDate
-          : resolvedTransactionDate;
-
-      setExtractedData({
-        title,
-        amount: Number.isFinite(amount) ? amount : 0,
-        type,
-        category,
-        vendor,
-        provider: provider || (utilityBill ? vendor : ''),
-        due_date: dueDate,
-        transaction_date: resolvedTransactionDate,
-        units_consumed:
-          typeof parsed.units_consumed === 'string' ? parsed.units_consumed : '',
-        consumer_number:
-          typeof parsed.consumer_number === 'string' ? parsed.consumer_number : '',
-        description:
-          typeof parsed.description === 'string' ? parsed.description : '',
-      });
-    } catch (error) {
-      const message =
-        error instanceof Error ? error.message : 'Unknown error during receipt analysis.';
-      console.error('AI Proxy OCR error:', message);
-      setOcrError(message);
-    } finally {
-      setIsProcessing(false);
-      setStep('review');
-    }
-  };
-
-  const handleSaveTransaction = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (isSaving) return;
-
-    setIsSaving(true);
-    try {
-      const newTxn: NewTransaction = {
-        title: extractedData.title || 'Scanned Receipt',
-        amount: Number(extractedData.amount) || 0,
-        type: extractedData.type,
-        category: mapCategory(extractedData.category),
-        transaction_date: extractedData.transaction_date,
-        provider: extractedData.provider,
-        due_date: extractedData.due_date,
-        units_consumed: extractedData.units_consumed,
-        source: 'scan',
-        is_paid: !isFutureDate(extractedData.transaction_date),
-        ...(capturedImage ? { has_receipt: true } : {}),
-      };
-
-      const savedTxn = await onSave(newTxn);
-      if (!savedTxn) {
-        setOcrError('The transaction could not be saved. Please try again.');
+    context.drawImage(video, 0, 0, canvas.width, canvas.height);
+    canvas.toBlob((blob) => {
+      if (!blob) {
+        setCaptureError(tr('cameraCaptureFailed', language));
         return;
       }
-      if (capturedImage) {
-        await saveReceiptImage(savedTxn.id, capturedImage);
-      }
-      handleClose();
-    } catch (err) {
-      console.error('Error saving scanned receipt:', err);
-      setOcrError(
-        err instanceof Error
-          ? err.message
-          : 'Could not save the transaction or its local receipt image.',
+      void savePhoto(blob, URL.createObjectURL(blob));
+    }, 'image/jpeg', 0.88);
+  };
+
+  const chooseNativePhoto = async (source: CameraSource) => {
+    try {
+      const photo = await NativeCamera.getPhoto({
+        quality: 88,
+        allowEditing: false,
+        resultType: CameraResultType.Uri,
+        source,
+      });
+      if (!photo.webPath) throw new Error('Native camera returned no local photo path.');
+      const response = await fetch(photo.webPath);
+      if (!response.ok) throw new Error(`Could not read the captured photo (${response.status}).`);
+      const blob = await response.blob();
+      await savePhoto(blob, URL.createObjectURL(blob));
+    } catch (error) {
+      console.error('Native camera or gallery selection failed:', error);
+      const name = error instanceof Error ? error.name : '';
+      setCameraError(
+        ['UserCancelled', 'CanceledOnUser'].includes(name)
+          ? null
+          : ['NotAllowedError', 'PermissionDeniedError', 'SecurityError'].includes(name)
+            ? tr('cameraPermissionRequired', language)
+            : tr('cameraStartFailed', language),
       );
-    } finally {
-      setIsSaving(false);
     }
+  };
+
+  const choosePhoto = () => {
+    if (Capacitor.isNativePlatform()) {
+      void chooseNativePhoto(CameraSource.Photos);
+    } else {
+      fileInputRef.current?.click();
+    }
+  };
+
+  const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+    const previewUrl = URL.createObjectURL(file);
+    void savePhoto(file, previewUrl);
+  };
+
+  const handleRetake = () => {
+    if (capturedImage) URL.revokeObjectURL(capturedImage);
+    setCapturedImage(null);
+    setWaitingForInternet(false);
+    setCaptureError(null);
   };
 
   const handleClose = () => {
     stopCamera();
+    if (capturedImage) URL.revokeObjectURL(capturedImage);
     setCapturedImage(null);
     setCameraError(null);
-    setOcrError(null);
-    setTransactionDateCustomized(false);
-    setStep('capture');
-    setIsProcessing(false);
-    setIsSaving(false);
+    setCaptureError(null);
+    setWaitingForInternet(false);
+    setSaving(false);
     onClose();
   };
 
-  if (!open) return null;
-
-  const isUrdu = language === 'ur';
-
   return (
-    <div
-      className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto"
+    <Modal
+      open={open}
+      onClose={handleClose}
+      title={tr('scanTitle', language)}
+      subtitle={tr('scanSubtitle', language)}
       dir={dir}
     >
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-md p-5 space-y-4 shadow-2xl relative my-8">
-        <div className="flex justify-between items-center border-b border-slate-800 pb-3">
-          <div>
-            <h3 className="text-lg font-bold text-white">
-              {isUrdu ? 'بل سکین اور OCR' : 'Bill Scan & OCR'}
-            </h3>
-            <p className="text-xs text-slate-400">
-              {step === 'capture'
-                ? isUrdu
-                  ? 'رسید یا بل کی تصویر لیں'
-                  : 'Capture or upload a receipt'
-                : isUrdu
-                ? 'نکالی گئی تفصیلات کی تصدیق کریں'
-                : 'Review extracted details'}
-            </p>
+      <div className="space-y-4">
+        {cameraError && (
+          <div role="alert" className="flex items-start gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-300">
+            <AlertCircle size={15} className="mt-0.5 shrink-0" />
+            <span>{cameraError}</span>
           </div>
-          <button
-            onClick={handleClose}
-            className="text-slate-400 hover:text-white text-xl p-1 transition"
-          >
-            ✕
-          </button>
+        )}
+        {captureError && (
+          <p role="alert" className="text-center text-xs text-rose-300">{captureError}</p>
+        )}
+
+        <div className="relative flex aspect-[3/4] items-center justify-center overflow-hidden rounded-xl border border-slate-800 bg-slate-950">
+          {capturedImage ? (
+            <img src={capturedImage} alt={tr('receiptPhotoAlt', language)} className="h-full w-full object-contain" />
+          ) : Capacitor.isNativePlatform() ? (
+            <span className="px-6 text-center text-sm text-slate-400">{tr('cameraPlaceholder', language)}</span>
+          ) : (
+            <video ref={videoRef} autoPlay playsInline muted className="h-full w-full object-cover" />
+          )}
+          {saving && (
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-slate-950/80">
+              <Loader2 className="animate-spin text-emerald-400" />
+              <span className="text-xs text-slate-200">{tr('savingMediaLocally', language)}</span>
+            </div>
+          )}
         </div>
 
+        {waitingForInternet && (
+          <p role="status" className="mx-auto w-fit rounded-full border border-amber-500/30 bg-amber-500/10 px-3 py-1.5 text-xs text-amber-300">
+            {tr('waitingForInternet', language)}
+          </p>
+        )}
+
+        {capturedImage ? (
+          <button
+            type="button"
+            onClick={handleRetake}
+            className="flex w-full items-center justify-center gap-2 rounded-xl border border-slate-700 bg-slate-800 py-3 text-sm text-slate-200"
+          >
+            <RotateCcw size={16} />
+            {tr('retakePhoto', language)}
+          </button>
+        ) : (
+          <div className="flex flex-col gap-2">
+            <button
+              type="button"
+              onClick={capturePhoto}
+              disabled={saving || !cameraReady}
+              className="flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-500 py-3 text-sm font-bold text-slate-950 disabled:opacity-50"
+            >
+              <Camera size={17} />
+              {tr('capturePhoto', language)}
+            </button>
+            <button
+              type="button"
+              onClick={choosePhoto}
+              disabled={saving}
+              className="flex w-full items-center justify-center gap-2 rounded-xl border border-slate-700 bg-slate-800 py-2.5 text-xs font-medium text-slate-200"
+            >
+              <FileUp size={16} />
+              {tr('uploadGalleryPhoto', language)}
+            </button>
+            <button
+              type="button"
+              onClick={() => void startCameraRef.current()}
+              className="text-xs text-slate-400 underline"
+            >
+              {tr('retry', language)}
+            </button>
+          </div>
+        )}
         <input
           ref={fileInputRef}
           type="file"
@@ -477,265 +271,7 @@ export function ScanModal({ open, onClose, language, dir, onSave }: ScanModalPro
           onChange={handleFileSelect}
           className="hidden"
         />
-
-        {step === 'capture' && (
-          <div className="space-y-4">
-            {cameraError && (
-              <div className="p-3 text-xs bg-amber-500/10 border border-amber-500/30 text-amber-400 rounded-xl text-center">
-                ⚠️ {cameraError}
-              </div>
-            )}
-
-            <div className="relative rounded-xl overflow-hidden bg-slate-950 aspect-[3/4] flex items-center justify-center border border-slate-800 shadow-inner">
-              {capturedImage ? (
-                <img
-                  src={capturedImage}
-                  alt="Captured receipt"
-                  className="w-full h-full object-cover"
-                />
-              ) : (
-                <video
-                  ref={videoRef}
-                  autoPlay
-                  playsInline
-                  muted
-                  className="w-full h-full object-cover"
-                />
-              )}
-
-              {isProcessing && (
-                <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-sm flex flex-col items-center justify-center gap-3">
-                  <div className="w-8 h-8 border-3 border-emerald-400 border-t-transparent rounded-full animate-spin"></div>
-                  <span className="text-xs font-semibold text-emerald-400">
-                    {isUrdu ? 'OCR پروسیسنگ جاری ہے...' : 'Extracting receipt data...'}
-                  </span>
-                </div>
-              )}
-            </div>
-
-            <div className="flex flex-col gap-2">
-              <button
-                type="button"
-                onClick={handleCapturePhoto}
-                disabled={isProcessing}
-                className="w-full py-3 bg-emerald-500 hover:bg-emerald-600 text-slate-950 text-sm font-bold rounded-xl transition shadow-lg shadow-emerald-500/20"
-              >
-                {isUrdu ? 'تصویر لیں' : 'Take Photo'}
-              </button>
-
-              <button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                disabled={isProcessing}
-                className="w-full py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium rounded-xl transition border border-slate-700"
-              >
-                {isUrdu ? 'گیلری سے منتخب کریں' : '📁 Upload from Gallery'}
-              </button>
-            </div>
-          </div>
-        )}
-
-        {step === 'review' && (
-          <form onSubmit={handleSaveTransaction} className="space-y-3 text-xs">
-            <div className="flex gap-1.5 bg-slate-950/60 rounded-2xl p-1.5">
-              <button
-                type="button"
-                onClick={() => handleTypeChange('income')}
-                aria-pressed={extractedData.type === 'income'}
-                className={`flex-1 py-2.5 rounded-xl text-sm font-semibold transition-all flex items-center justify-center gap-2 ${
-                  extractedData.type === 'income'
-                    ? 'bg-emerald-500/15 text-emerald-400 shadow-sm'
-                    : 'text-slate-500 hover:text-slate-300'
-                }`}
-              >
-                <ArrowDownLeft size={16} />
-                {tr('income', isUrdu ? 'ur' : 'en')}
-              </button>
-              <button
-                type="button"
-                onClick={() => handleTypeChange('expense')}
-                aria-pressed={extractedData.type === 'expense'}
-                className={`flex-1 py-2.5 rounded-xl text-sm font-semibold transition-all flex items-center justify-center gap-2 ${
-                  extractedData.type === 'expense'
-                    ? 'bg-rose-500/15 text-rose-400 shadow-sm'
-                    : 'text-slate-500 hover:text-slate-300'
-                }`}
-              >
-                <ArrowUpRight size={16} />
-                {tr('expense', isUrdu ? 'ur' : 'en')}
-              </button>
-            </div>
-
-            {ocrError && (
-              <div className="p-3 bg-red-500/10 border border-red-500/30 text-red-300 rounded-xl">
-                Receipt processing error: {ocrError}
-              </div>
-            )}
-            {capturedImage && (
-              <div className="relative h-28 rounded-xl overflow-hidden border border-slate-800">
-                <img
-                  src={capturedImage}
-                  alt="Receipt preview"
-                  className="w-full h-full object-cover opacity-60"
-                />
-                <button
-                  type="button"
-                  onClick={handleRetake}
-                  className="absolute bottom-2 right-2 px-3 py-1 bg-slate-900/90 text-amber-400 border border-amber-500/30 rounded-lg font-medium hover:bg-slate-800 transition"
-                >
-                  {isUrdu ? 'دوبارہ تصویر لیں' : '📷 Retake Photo'}
-                </button>
-              </div>
-            )}
-
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <label className="text-slate-400 block mb-1">Title</label>
-                <input
-                  type="text"
-                  value={extractedData.title}
-                  onChange={(e) =>
-                    setExtractedData({ ...extractedData, title: e.target.value })
-                  }
-                  className="w-full p-2.5 bg-slate-800 text-white rounded-lg border border-slate-700 focus:outline-none focus:border-emerald-500"
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="text-slate-400 block mb-1">Amount (PKR)</label>
-                <input
-                  type="number"
-                  value={extractedData.amount}
-                  onChange={(e) =>
-                    setExtractedData({
-                      ...extractedData,
-                      amount: Number(e.target.value),
-                    })
-                  }
-                  className="w-full p-2.5 bg-slate-800 text-white rounded-lg border border-slate-700 focus:outline-none focus:border-emerald-500 font-bold"
-                  required
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <label className="text-slate-400 block mb-1">Vendor</label>
-                <input
-                  type="text"
-                  value={extractedData.vendor}
-                  onChange={(e) =>
-                    setExtractedData({
-                      ...extractedData,
-                      vendor: e.target.value,
-                    })
-                  }
-                  className="w-full p-2.5 bg-slate-800 text-white rounded-lg border border-slate-700 focus:outline-none focus:border-emerald-500"
-                />
-              </div>
-
-              <div>
-                <label className="text-slate-400 block mb-1">Category</label>
-                <select
-                  value={extractedData.category}
-                  onChange={(e) =>
-                    setExtractedData({
-                      ...extractedData,
-                      category: e.target.value as Category,
-                    })
-                  }
-                  className="w-full p-2.5 bg-slate-800 text-white rounded-lg border border-slate-700 focus:outline-none focus:border-emerald-500"
-                >
-                  {categories.map((category) => (
-                    <option key={category} value={category}>
-                      {CATEGORIES[category].emoji}{' '}
-                      {getCategoryLabel(category, isUrdu ? 'ur' : 'en')}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <label className="text-slate-400 block mb-1">Transaction Date</label>
-                <input
-                  type="date"
-                  value={extractedData.transaction_date}
-                  onChange={(e) => {
-                    setTransactionDateCustomized(true);
-                    setExtractedData({
-                      ...extractedData,
-                      transaction_date: e.target.value,
-                    });
-                  }}
-                  className="w-full p-2.5 bg-slate-800 text-white rounded-lg border border-slate-700 focus:outline-none focus:border-emerald-500"
-                  required
-                />
-              </div>
-              <div>
-                <label className="text-slate-400 block mb-1">Due Date</label>
-                <input
-                  type="date"
-                  value={extractedData.due_date}
-                  onChange={(e) => {
-                    const dueDate = e.target.value;
-                    setExtractedData({
-                      ...extractedData,
-                      due_date: dueDate,
-                      ...(transactionDateCustomized
-                        ? {}
-                        : { transaction_date: dueDate || new Date().toISOString().split('T')[0] }),
-                    });
-                  }}
-                  className="w-full p-2.5 bg-slate-800 text-white rounded-lg border border-slate-700 focus:outline-none focus:border-emerald-500"
-                />
-              </div>
-
-              <div>
-                <label className="text-slate-400 block mb-1">Units Consumed</label>
-                <input
-                  type="text"
-                  placeholder="e.g. 280 kWh"
-                  value={extractedData.units_consumed}
-                  onChange={(e) =>
-                    setExtractedData({
-                      ...extractedData,
-                      units_consumed: e.target.value,
-                    })
-                  }
-                  className="w-full p-2.5 bg-slate-800 text-white rounded-lg border border-slate-700 focus:outline-none focus:border-emerald-500"
-                />
-              </div>
-            </div>
-
-            <div className="flex gap-2 pt-2">
-              <button
-                type="button"
-                onClick={handleRetake}
-                className="w-1/3 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold rounded-xl transition"
-              >
-                {isUrdu ? 'منسوخ کریں' : 'Cancel'}
-              </button>
-
-              <button
-                type="submit"
-                disabled={isSaving}
-                className="w-2/3 py-2.5 bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold rounded-xl transition shadow-lg shadow-emerald-500/20"
-              >
-                {isSaving
-                  ? isUrdu
-                    ? 'محفوظ ہو رہا ہے...'
-                    : 'Saving...'
-                  : isUrdu
-                  ? 'محفوظ کریں'
-                  : 'Save Transaction'}
-              </button>
-            </div>
-          </form>
-        )}
       </div>
-    </div>
+    </Modal>
   );
 }

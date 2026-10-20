@@ -1,4 +1,4 @@
-import { del, get, set } from 'idb-keyval';
+import { del, get, keys, set } from 'idb-keyval';
 
 function receiptKey(transactionId: string): string {
   return `receipt_${transactionId}`;
@@ -31,6 +31,16 @@ export async function saveReceiptImage(
   }
 
   const imageBlob = await response.blob();
+  await saveReceiptBlob(transactionId, imageBlob);
+}
+
+export async function saveReceiptBlob(
+  transactionId: string,
+  imageBlob: Blob,
+): Promise<void> {
+  if (!imageBlob.type.startsWith('image/')) {
+    throw new Error('Receipt photo must be an image Blob.');
+  }
   await set(receiptKey(resolveReceiptId(transactionId)), imageBlob);
 }
 
@@ -61,4 +71,19 @@ export async function moveReceiptImage(
   } catch (error) {
     console.error('Error saving receipt transaction ID mapping:', error);
   }
+}
+
+export async function deleteAllReceiptImages(): Promise<void> {
+  for (const key of await keys()) {
+    if (typeof key === 'string' && key.startsWith('receipt_')) {
+      await del(key);
+    }
+  }
+  if (typeof localStorage === 'undefined') return;
+  const aliases: string[] = [];
+  for (let index = 0; index < localStorage.length; index += 1) {
+    const key = localStorage.key(index);
+    if (key?.startsWith('rozana_receipt_alias_')) aliases.push(key);
+  }
+  aliases.forEach((key) => localStorage.removeItem(key));
 }

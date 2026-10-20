@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react';
-import { Languages, Camera, FileUp, LogOut, Bell, BellRing } from 'lucide-react';
+import { Languages, Camera, FileUp, LogOut, Bell, BellRing, Settings } from 'lucide-react';
 import type { Language } from '@/types';
+import { Capacitor } from '@capacitor/core';
 import { tr } from '@/lib/i18n';
 import type { UserProfile } from '@/hooks/useProfile';
 import { usePushNotifications } from '@/hooks/usePushNotifications';
@@ -14,6 +15,7 @@ interface HeaderProps {
   userMetadata?: Record<string, unknown>;
   onAvatarChange: (file: File) => Promise<void>;
   onImportBank: () => void;
+  onOpenSettings: () => void;
   onLogout: () => void;
   userId?: string; // Passed from App.tsx session.user.id
 }
@@ -35,6 +37,7 @@ export function Header({
   userMetadata,
   onAvatarChange,
   onImportBank,
+  onOpenSettings,
   onLogout,
   userId,
 }: HeaderProps) {
@@ -47,6 +50,7 @@ export function Header({
     (typeof userMetadata?.avatar_url === 'string' ? userMetadata.avatar_url : null) ??
     (typeof userMetadata?.picture === 'string' ? userMetadata.picture : null);
   const initials = profile ? getInitials(profile.name, language) : language === 'ur' ? 'م' : 'MH';
+  const isNative = Capacitor.isNativePlatform();
   
   // Initialize Push Notifications Hook
   const { isSubscribed, subscribeToPush, loading } = usePushNotifications(userId);
@@ -118,7 +122,7 @@ export function Header({
         <div className={`flex shrink-0 items-center gap-1.5 ${dir === 'rtl' ? 'flex-row-reverse' : ''}`}>
           
           {/* Push Notification Toggle Button */}
-          <button
+          {!isNative && <button
             onClick={subscribeToPush}
             disabled={loading || isSubscribed}
             title={isSubscribed ? 'Reminders Active' : 'Enable Reminders'}
@@ -133,7 +137,7 @@ export function Header({
             <span className="text-xs font-semibold hidden sm:inline sm:ml-1.5">
               {isSubscribed ? 'Active' : 'Alerts'}
             </span>
-          </button>
+          </button>}
 
           {/* Import Bank Button */}
           <button
@@ -155,6 +159,16 @@ export function Header({
             <span className="text-xs font-semibold hidden sm:inline sm:ml-1.5">
               {language === 'en' ? 'EN' : 'اردو'}
             </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={onOpenSettings}
+            className="flex h-9 w-9 items-center justify-center rounded-xl border border-slate-700 bg-slate-800/80 text-slate-300 transition hover:bg-slate-700 hover:text-slate-100 active:scale-95"
+            aria-label={tr('settingsTitle', language)}
+            title={tr('settingsTitle', language)}
+          >
+            <Settings size={16} />
           </button>
 
           {/* Logout */}

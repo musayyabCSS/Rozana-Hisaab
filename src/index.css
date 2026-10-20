@@ -2,6 +2,46 @@
 @tailwind components;
 @tailwind utilities;
 
+@font-face {
+  font-family: 'Noto Nastaliq Urdu';
+  src: url('/fonts/noto-nastaliq-urdu-400.ttf') format('truetype');
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Noto Nastaliq Urdu';
+  src: url('/fonts/noto-nastaliq-urdu-700.ttf') format('truetype');
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Noto Sans Arabic';
+  src: url('/fonts/noto-sans-arabic-400.ttf') format('truetype');
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Noto Sans Arabic';
+  src: url('/fonts/noto-sans-arabic-500.ttf') format('truetype');
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Noto Sans Arabic';
+  src: url('/fonts/noto-sans-arabic-700.ttf') format('truetype');
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+}
+
 @layer base {
   html,
   body,

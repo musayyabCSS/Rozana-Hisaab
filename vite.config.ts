@@ -9,6 +9,7 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
+      injectRegister: null,
       manifest: false,
       workbox: {
         // Precache app assets PLUS index.html for cold offline launches

@@ -38,6 +38,7 @@ export function TransactionFeed({
 }: TransactionFeedProps) {
   const [receiptPreview, setReceiptPreview] = useState<string | null>(null);
   const [receiptError, setReceiptError] = useState<{ id: string; message: string } | null>(null);
+  const [receiptUnavailableId, setReceiptUnavailableId] = useState<string | null>(null);
   const [showAll, setShowAll] = useState(false);
   const [search, setSearch] = useState('');
   const [dateRange, setDateRange] = useState<'month' | '30days' | 'all'>('all');
@@ -115,18 +116,11 @@ export function TransactionFeed({
 
   const showReceipt = async (transaction: Transaction) => {
     setReceiptError(null);
+    setReceiptUnavailableId(null);
     try {
       const imageUrl = await getReceiptImage(transaction.id);
       if (!imageUrl) {
-        setReceiptError(
-          {
-            id: transaction.id,
-            message:
-              language === 'ur'
-                ? 'رسید کی تصویر اس ڈیوائس پر موجود نہیں۔'
-                : 'Receipt image is not available on this device.',
-          },
-        );
+        setReceiptUnavailableId(transaction.id);
         return;
       }
       setReceiptPreview(imageUrl);
@@ -424,6 +418,11 @@ export function TransactionFeed({
                         >
                           <span aria-hidden="true">⚠️</span>
                           <span>{receiptError.message}</span>
+                        </div>
+                      )}
+                      {receiptUnavailableId === txn.id && (
+                        <div className="mt-1 rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-xs text-slate-300">
+                          {tr('receiptStoredOnAnotherDevice', language)}
                         </div>
                       )}
                     </div>

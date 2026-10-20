@@ -16,13 +16,20 @@ import { BankStatementModal } from '@/components/modals/BankStatementModal';
 import { ExportModal } from '@/components/modals/ExportModal';
 import { EditTransactionModal } from '@/components/modals/EditTransactionModal';
 import { SetNewPasswordModal } from '@/components/modals/SetNewPasswordModal';
+import { PendingMediaReviewModal } from '@/components/modals/PendingMediaReviewModal';
+import { PrivacyConsentModal } from '@/components/modals/PrivacyConsentModal';
+import { SettingsModal } from '@/components/modals/SettingsModal';
 import { useLanguage } from '@/hooks/useLanguage';
 import { useTransactions } from '@/hooks/useTransactions';
 import { useProfile } from '@/hooks/useProfile';
+import { usePendingMedia } from '@/hooks/usePendingMedia';
 import { getMonthStats } from '@/lib/format';
+import { tr } from '@/lib/i18n';
+import { saveReceiptBlob } from '@/lib/receiptStorage';
 import type { NewTransaction, Transaction } from '@/types';
+import type { PendingMedia } from '@/lib/localStore';
 
-type ModalType = 'voice' | 'scan' | 'add' | 'bank' | 'export' | null;
+type ModalType = 'voice' | 'scan' | 'add' | 'bank' | 'export' | 'settings' | null;
 
 const REFRESH_THRESHOLD = 65;
 const MAX_PULL_DISTANCE = 80;
@@ -41,10 +48,18 @@ function App() {
     transactions,
     addTransaction,
     deleteTransaction,
+    deleteAllTransactions,
     updateTransaction,
     refetch: refetchTransactions,
     offlineSavedNotice,
   } = useTransactions(session?.user.id);
+  const {
+    pendingMedia,
+    queueMedia,
+    retryMedia,
+    removeMedia,
+    deleteMyMedia,
+  } = usePendingMedia(session?.user.id);
   const {
     profile,
     onboarded,
@@ -54,6 +69,12 @@ function App() {
     syncProfile,
   } = useProfile(session?.user.id);
   const [activeModal, setActiveModal] = useState<ModalType>(null);
+  const [captureConsentOpen, setCaptureConsentOpen] = useState(false);
+  const [captureRequested, setCaptureRequested] = useState<'voice' | 'scan' | null>(null);
+  const [dismissedMediaId, setDismissedMediaId] = useState<string | null>(null);
+  const consentAcceptedRef = useRef(
+    typeof localStorage !== 'undefined' && localStorage.getItem('rozana-ai-media-consent') === 'true',
+  );
   const [feedFilter, setFeedFilter] = useState<'all' | 'income' | 'expense'>('all');
   const [showWelcome, setShowWelcome] = useState(
     () => onboarded && (typeof navigator === 'undefined' || navigator.onLine),
@@ -65,6 +86,92 @@ function App() {
   const touchStartRef = useRef<{ x: number; y: number } | null>(null);
   const pullDistanceRef = useRef(0);
   const thresholdReachedRef = useRef(false);
+  const reviewMedia =
+    pendingMedia.find(
+      (item) =>
+        item.id !== dismissedMediaId &&
+        (item.status === 'done' || item.status === 'failed'),
+    ) ?? null;
+
+  const requestCapture = (capture: 'voice' | 'scan') => {
+    if (consentAcceptedRef.current) {
+      setActiveModal(capture);
+      return;
+    }
+    setCaptureRequested(capture);
+    setCaptureConsentOpen(true);
+  };
+
+  const acceptCaptureConsent = () => {
+    consentAcceptedRef.current = true;
+    try {
+      localStorage.setItem('rozana-ai-media-consent', 'true');
+    } catch (error) {
+      console.error('Could not save AI media consent on this device:', error);
+    }
+    setCaptureConsentOpen(false);
+    if (captureRequested) setActiveModal(captureRequested);
+    setCaptureRequested(null);
+  };
+
+  const handleMediaSave = async (media: PendingMedia, draft: Transaction) => {
+    const transaction = await addTransaction({
+      id: draft.id,
+      type: draft.type,
+      amount: draft.amount,
+      category: draft.category,
+      title: draft.title,
+      payment_method: draft.payment_method,
+      provider: draft.provider,
+      due_date: draft.due_date,
+      units_consumed: draft.units_consumed,
+      source: draft.source,
+      transaction_date: draft.transaction_date,
+      has_receipt: media.type === 'receipt',
+      is_paid: draft.is_paid,
+    });
+    if (!transaction) return;
+    if (media.type === 'receipt') {
+      await saveReceiptBlob(transaction.id, media.blob);
+    }
+    await removeMedia(media.id);
+    setDismissedMediaId(null);
+  };
+
+  const nativeBackHandlerRef = useRef<() => void>(() => {});
+  nativeBackHandlerRef.current = () => {
+    if (reviewMedia) {
+      setDismissedMediaId(reviewMedia.id);
+    } else if (captureConsentOpen) {
+      setCaptureConsentOpen(false);
+      setCaptureRequested(null);
+    } else if (activeModal) {
+      setActiveModal(null);
+    } else if (editingTransaction) {
+      setEditingTransaction(null);
+    } else if (showWelcome) {
+      setShowWelcome(false);
+    } else if (session && !loadingProfile && onboarded) {
+      void CapApp.exitApp();
+    } else if (window.history.length > 1) {
+      window.history.back();
+    }
+  };
+
+  useEffect(() => {
+    let mounted = true;
+    let removeListener: (() => void) | null = null;
+    void CapApp.addListener('backButton', () => nativeBackHandlerRef.current()).then((listener) => {
+      if (mounted) removeListener = () => void listener.remove();
+      else void listener.remove();
+    }).catch((error: unknown) => {
+      console.error('Could not register Android back button handler:', error);
+    });
+    return () => {
+      mounted = false;
+      removeListener?.();
+    };
+  }, []);
 
   const now = new Date();
   const stats = getMonthStats(transactions, now.getFullYear(), now.getMonth());
@@ -310,11 +417,6 @@ function App() {
     [addTransaction],
   );
 
-  const handleSaveScannedTransaction = useCallback(
-    async (txn: NewTransaction) => addTransaction(txn),
-    [addTransaction],
-  );
-
   const handleBankImport = useCallback(
     async (txns: NewTransaction[]) => {
       for (const txn of txns) {
@@ -430,6 +532,15 @@ function App() {
           Saved offline. Will sync when back online.
         </div>
       )}
+      {pendingMedia.some((item) => item.status === 'pending_ai' || item.status === 'processing') && (
+        <div
+          role="status"
+          aria-live="polite"
+          className="fixed bottom-40 left-1/2 z-40 -translate-x-1/2 rounded-full border border-amber-500/30 bg-slate-900/95 px-4 py-2 text-xs text-amber-300 shadow-xl"
+        >
+          {navigator.onLine ? tr('mediaProcessing', language) : tr('waitingForInternet', language)}
+        </div>
+      )}
       <Header
         language={language}
         onToggleLanguage={toggleLanguage}
@@ -440,6 +551,7 @@ function App() {
           await uploadAvatar(file);
         }}
         onImportBank={() => setActiveModal('bank')}
+        onOpenSettings={() => setActiveModal('settings')}
         onLogout={handleLogout}
         userId={session?.user?.id}
       />
@@ -494,8 +606,8 @@ function App() {
       <BottomBar
         language={language}
         dir={dir}
-        onScan={() => setActiveModal('scan')}
-        onVoice={() => setActiveModal('voice')}
+        onScan={() => requestCapture('scan')}
+        onVoice={() => requestCapture('voice')}
         onAdd={() => setActiveModal('add')}
         onExport={() => setActiveModal('export')}
       />
@@ -506,7 +618,9 @@ function App() {
         onClose={() => setActiveModal(null)}
         language={language}
         dir={dir}
-        onSave={handleSaveTransaction}
+        onCaptureMedia={async (blob) => {
+          await queueMedia('voice', blob);
+        }}
       />
 
       <ScanModal
@@ -514,7 +628,9 @@ function App() {
         onClose={() => setActiveModal(null)}
         language={language}
         dir={dir}
-        onSave={handleSaveScannedTransaction}
+        onCaptureMedia={async (blob) => {
+          await queueMedia('receipt', blob);
+        }}
       />
 
       <ManualEntryModal
@@ -547,6 +663,38 @@ function App() {
         onSave={handleUpdate}
         language={language}
         dir={dir}
+      />
+      <SettingsModal
+        open={activeModal === 'settings'}
+        onClose={() => setActiveModal(null)}
+        language={language}
+        dir={dir}
+        onDeleteMedia={deleteMyMedia}
+        onDeleteData={deleteAllTransactions}
+      />
+      <PrivacyConsentModal
+        open={captureConsentOpen}
+        onAccept={acceptCaptureConsent}
+        onCancel={() => {
+          setCaptureConsentOpen(false);
+          setCaptureRequested(null);
+        }}
+        language={language}
+        dir={dir}
+      />
+      <PendingMediaReviewModal
+        media={reviewMedia}
+        language={language}
+        dir={dir}
+        onRetry={(id) => {
+          setDismissedMediaId(null);
+          void retryMedia(id);
+        }}
+        onDiscard={(id) => {
+          void removeMedia(id);
+          setDismissedMediaId(null);
+        }}
+        onSave={handleMediaSave}
       />
     </div>
   );
