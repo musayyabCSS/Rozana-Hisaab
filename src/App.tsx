@@ -114,7 +114,7 @@ function App() {
     setCaptureRequested(null);
   };
 
-  const handleMediaSave = async (media: PendingMedia, draft: Transaction) => {
+  const handleMediaSave = async (media: PendingMedia, draft: Transaction): Promise<boolean> => {
     const transaction = await addTransaction({
       id: draft.id,
       type: draft.type,
@@ -130,12 +130,13 @@ function App() {
       has_receipt: media.type === 'receipt',
       is_paid: draft.is_paid,
     });
-    if (!transaction) return;
+    if (!transaction) return false;
     if (media.type === 'receipt') {
       await saveReceiptBlob(transaction.id, media.blob);
     }
     await removeMedia(media.id);
     setDismissedMediaId(null);
+    return true;
   };
 
   const nativeBackHandlerRef = useRef<() => void>(() => {});

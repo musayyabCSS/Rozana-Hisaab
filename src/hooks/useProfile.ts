@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import type { User } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
-import { getAvatarFileExtension, validateAvatarFile } from '@/lib/avatar';
+import { compressAvatarToDataUrl, validateAvatarFile } from '@/lib/avatar';
 
 export interface UserProfile {
   name: string;
@@ -41,13 +41,19 @@ function readCachedProfile(userId?: string): UserProfile | null {
   return null;
 }
 
-function writeCachedProfile(userId: string, profile: UserProfile) {
+function writeCachedProfile(userId: string, profile: UserProfile): boolean {
   try {
     localStorage.setItem(`rozana_profile_${userId}`, JSON.stringify(profile));
-    localStorage.setItem(CACHED_PROFILE_KEY, JSON.stringify(profile));
   } catch (e) {
     console.error('Error writing profile cache:', e);
+    return false;
   }
+  try {
+    localStorage.setItem(CACHED_PROFILE_KEY, JSON.stringify(profile));
+  } catch (e) {
+    console.warn('Could not update the generic profile cache:', e);
+  }
+  return true;
 }
 
 export function useProfile(activeUserId?: string) {
@@ -63,7 +69,16 @@ export function useProfile(activeUserId?: string) {
       if (error || !user) return;
       if (activeUserId && user.id !== activeUserId) return;
 
-      const latestProfile = extractProfile(user);
+      const cachedProfile = readCachedProfile(user.id);
+      const remoteProfile = extractProfile(user);
+      const cachedAvatar = cachedProfile?.avatar?.startsWith('data:image/')
+        ? cachedProfile.avatar
+        : null;
+      const latestProfile = cachedAvatar
+        ? { ...remoteProfile, avatar: cachedAvatar }
+        : remoteProfile.avatar
+          ? remoteProfile
+          : { ...remoteProfile, avatar: cachedProfile?.avatar ?? null };
       writeCachedProfile(user.id, latestProfile);
       setProfile(latestProfile);
       setOnboarded(true);
@@ -114,7 +129,16 @@ export function useProfile(activeUserId?: string) {
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       if (session?.user) {
-        const metadataProfile = extractProfile(session.user);
+        const remoteProfile = extractProfile(session.user);
+        const cachedProfile = readCachedProfile(session.user.id);
+        const cachedAvatar = cachedProfile?.avatar?.startsWith('data:image/')
+          ? cachedProfile.avatar
+          : null;
+        const metadataProfile = cachedAvatar
+          ? { ...remoteProfile, avatar: cachedAvatar }
+          : remoteProfile.avatar
+            ? remoteProfile
+            : { ...remoteProfile, avatar: cachedProfile?.avatar ?? null };
         writeCachedProfile(session.user.id, metadataProfile);
         setProfile(metadataProfile);
         setOnboarded(true);
@@ -151,9 +175,6 @@ export function useProfile(activeUserId?: string) {
     const validationError = validateAvatarFile(file);
     if (validationError) throw new Error(validationError);
 
-    const extension = getAvatarFileExtension(file);
-    if (!extension) throw new Error('Choose a JPEG, PNG, or WebP image.');
-
     const { data: { session }, error: sessionError } = await supabase.auth.getSession();
     if (sessionError) throw sessionError;
     const user = session?.user;
@@ -161,30 +182,23 @@ export function useProfile(activeUserId?: string) {
       throw new Error('Could not confirm the active user. Please sign in again.');
     }
 
-    const path = `${user.id}/avatar.${extension}`;
-
-    // 1. Upload to Supabase Storage with upsert
-    const { error: uploadError } = await supabase.storage
-      .from('avatars')
-      .upload(path, file, { upsert: true, contentType: file.type });
-    if (uploadError) throw uploadError;
-
-    // 2. Obtain direct public CDN URL
-    const { data } = supabase.storage.from('avatars').getPublicUrl(path);
-    const publicUrl = `${data.publicUrl}?t=${Date.now()}`;
-    const updated = { ...(profile ?? { name: 'User', avatar: null }), avatar: publicUrl };
-
-    // 3. Update local state immediately
+    const avatarDataUrl = await compressAvatarToDataUrl(file);
+    const updated = { ...(profile ?? { name: 'User', avatar: null }), avatar: avatarDataUrl };
+    if (!writeCachedProfile(user.id, updated)) {
+      throw new Error('Could not persist the profile photo on this device.');
+    }
     setProfile(updated);
-    writeCachedProfile(user.id, updated);
 
-    // 4. Update user metadata in Supabase Auth
-    const { error: updateError } = await supabase.auth.updateUser({
-      data: { avatar_url: publicUrl },
-    });
-    if (updateError) throw updateError;
+    if (typeof navigator !== 'undefined' && navigator.onLine) {
+      const { error: updateError } = await supabase.auth.updateUser({
+        data: { avatar_url: avatarDataUrl },
+      });
+      if (updateError) {
+        console.warn('Profile photo is saved locally but could not sync to the account:', updateError);
+      }
+    }
 
-    return publicUrl;
+    return avatarDataUrl;
   }, [profile]);
 
   return {

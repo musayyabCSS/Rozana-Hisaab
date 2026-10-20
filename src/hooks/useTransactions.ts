@@ -14,12 +14,14 @@ const CACHE_KEY = 'rozana_transactions_cache';
 
 function createTransactionId(): string {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
-    return crypto.randomUUID();
+    try {
+      const id = crypto.randomUUID();
+      if (id) return id;
+    } catch {
+      // Continue with the WebView-compatible fallback.
+    }
   }
-  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (character) => {
-    const random = Math.floor(Math.random() * 16);
-    return (character === 'x' ? random : (random & 0x3) | 0x8).toString(16);
-  });
+  return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 }
 
 function isNetworkError(error: unknown): boolean {
@@ -246,7 +248,7 @@ export function useTransactions(activeUserId?: string) {
       if (!activeUserId) return null;
 
       const transaction: Transaction & { is_synced: false } = {
-        id: txn.id ?? createTransactionId(),
+        id: txn.id?.trim() || createTransactionId(),
         type: txn.type,
         amount: txn.amount,
         category: txn.category,
@@ -272,6 +274,25 @@ export function useTransactions(activeUserId?: string) {
         });
       } catch (error) {
         console.error('Could not queue transaction on this device:', error);
+        if (typeof navigator !== 'undefined' && navigator.onLine) {
+          try {
+            const { data, error: saveError } = await supabase
+              .from('transactions')
+              .upsert(toSupabasePayload(transaction, activeUserId), { onConflict: 'id' })
+              .select()
+              .single();
+            if (saveError) throw saveError;
+            const savedTransaction = { ...data, is_synced: true };
+            setTransactions((current) => {
+              const next = [savedTransaction, ...current.filter((item) => item.id !== savedTransaction.id)];
+              saveTransactionCache(activeUserId, next);
+              return next;
+            });
+            return savedTransaction;
+          } catch (saveError) {
+            console.error('Could not save transaction directly to the server:', saveError);
+          }
+        }
         alert('Could not save this transaction on your device. Please try again.');
         return null;
       }
@@ -292,8 +313,14 @@ export function useTransactions(activeUserId?: string) {
       } catch (error) {
         console.error('Transaction saved locally and sync is pending:', error);
       }
-      const pending = await getPendingTransactionOperations(activeUserId);
-      if (pending.some((operation) => operation.id === transaction.id)) {
+      try {
+        const pending = await getPendingTransactionOperations(activeUserId);
+        if (pending.some((operation) => operation.id === transaction.id)) {
+          setOfflineSavedNotice(true);
+          return transaction;
+        }
+      } catch (error) {
+        console.error('Could not verify transaction sync status:', error);
         setOfflineSavedNotice(true);
         return transaction;
       }
