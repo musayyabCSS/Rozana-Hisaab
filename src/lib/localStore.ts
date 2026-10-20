@@ -34,6 +34,8 @@ export interface PendingMedia {
   attempts: number;
   userId: string;
   error?: string;
+  errorKind?: 'auth' | 'limit' | 'too_large' | 'invalid' | 'server' | 'network';
+  nextRetryAt?: string;
   transaction?: Transaction;
 }
 

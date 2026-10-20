@@ -26,6 +26,8 @@ function pickMimeType(): string {
   return '';
 }
 
+const MAX_RECORDING_SECONDS = 60;
+
 export function VoiceModal({ open, onClose, language, dir, onCaptureMedia }: VoiceModalProps) {
   const [recording, setRecording] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -36,6 +38,7 @@ export function VoiceModal({ open, onClose, language, dir, onCaptureMedia }: Voi
   const recorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const timerRef = useRef<number | null>(null);
+  const stopRecordingRef = useRef<() => void>(() => {});
   const requestIdRef = useRef(0);
   const openRef = useRef(open);
   const onCaptureMediaRef = useRef(onCaptureMedia);
@@ -69,9 +72,9 @@ export function VoiceModal({ open, onClose, language, dir, onCaptureMedia }: Voi
       }
       streamRef.current = stream;
       const mimeType = pickMimeType();
-      const recorder = mimeType
-        ? new MediaRecorder(stream, { mimeType })
-        : new MediaRecorder(stream);
+      const recorderOptions: MediaRecorderOptions = { audioBitsPerSecond: 32_000 };
+      if (mimeType) recorderOptions.mimeType = mimeType;
+      const recorder = new MediaRecorder(stream, recorderOptions);
       chunksRef.current = [];
       recorder.ondataavailable = (event) => {
         if (event.data.size > 0) chunksRef.current.push(event.data);
@@ -98,7 +101,12 @@ export function VoiceModal({ open, onClose, language, dir, onCaptureMedia }: Voi
       recorderRef.current = recorder;
       recorder.start();
       setRecording(true);
-      timerRef.current = window.setInterval(() => setRecordSeconds((seconds) => seconds + 1), 1000);
+      let elapsedSeconds = 0;
+      timerRef.current = window.setInterval(() => {
+        elapsedSeconds += 1;
+        setRecordSeconds(elapsedSeconds);
+        if (elapsedSeconds >= MAX_RECORDING_SECONDS) stopRecordingRef.current();
+      }, 1000);
     } catch (permissionError) {
       if (requestId !== requestIdRef.current) return;
       const name = permissionError instanceof Error ? permissionError.name : '';
@@ -158,6 +166,7 @@ export function VoiceModal({ open, onClose, language, dir, onCaptureMedia }: Voi
     }
     releaseMicrophone();
   };
+  stopRecordingRef.current = handleStop;
 
   const handleClose = () => {
     requestIdRef.current += 1;
@@ -204,7 +213,8 @@ export function VoiceModal({ open, onClose, language, dir, onCaptureMedia }: Voi
 
         {recording && (
           <>
-            <p className="mt-4 text-lg font-bold tabular-nums text-rose-400">{formatTimer(recordSeconds)}</p>
+            <p className="mt-4 text-lg font-bold tabular-nums text-rose-400">{formatTimer(MAX_RECORDING_SECONDS - recordSeconds)}</p>
+            <p className="mt-1 text-xs text-slate-400">{tr('voiceMaxDuration', language)}</p>
             <div className="mt-4 flex h-12 items-center gap-1">
               {Array.from({ length: 24 }).map((_, index) => (
                 <span

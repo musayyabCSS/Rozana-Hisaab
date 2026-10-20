@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { App as CapApp } from '@capacitor/app';
+import { supabase } from '@/lib/supabase';
 import type { NewTransaction, Transaction } from '@/types';
 import {
   deleteAllPendingMedia,
@@ -8,7 +9,7 @@ import {
   setPendingMedia as storePendingMedia,
   type PendingMedia,
 } from '@/lib/localStore';
-import { parseReceiptImage, parseVoice, transcribeAudioWithWhisper } from '@/lib/ai';
+import { AiRequestError, parseReceiptImage, parseVoice, transcribeAudioWithWhisper } from '@/lib/ai';
 import { deleteAllReceiptImages } from '@/lib/receiptStorage';
 import { EXPENSE_CATEGORIES } from '@/lib/categories';
 
@@ -112,6 +113,8 @@ export function usePendingMedia(userId?: string) {
   const [loading, setLoading] = useState(true);
   const processingRef = useRef(false);
   const processingEpochRef = useRef(0);
+  const authPausedRef = useRef(false);
+  const retryTimerRef = useRef<number | null>(null);
   const userIdRef = useRef(userId);
   userIdRef.current = userId;
 
@@ -145,36 +148,69 @@ export function usePendingMedia(userId?: string) {
 
   const processPending = useCallback(async () => {
     const activeUserId = userIdRef.current;
-    if (!activeUserId || !navigator.onLine || processingRef.current) return;
+    if (!activeUserId || !navigator.onLine || processingRef.current || authPausedRef.current) return;
     processingRef.current = true;
     const processingEpoch = processingEpochRef.current;
     try {
       while (navigator.onLine) {
         if (processingEpoch !== processingEpochRef.current) break;
         const items = await getPendingMediaForUser(activeUserId);
+        const now = Date.now();
         const media = items
-          .filter((item) => item.status === 'pending_ai' && item.attempts < 5)
+          .filter((item) =>
+            item.status === 'pending_ai' &&
+            item.attempts < 5 &&
+            (!item.nextRetryAt || Date.parse(item.nextRetryAt) <= now),
+          )
           .sort((a, b) => a.createdAt.localeCompare(b.createdAt))[0];
         if (!media) break;
 
-        const attempts = media.attempts + 1;
-        await updateMedia({ ...media, status: 'processing', attempts, error: undefined });
+        await updateMedia({
+          ...media,
+          status: 'processing',
+          error: undefined,
+          errorKind: undefined,
+        });
         try {
           const transaction = await processMedia(media);
           if (processingEpoch !== processingEpochRef.current) break;
-          await updateMedia({ ...media, status: 'done', attempts, transaction });
+          await updateMedia({
+            ...media,
+            status: 'done',
+            error: undefined,
+            errorKind: undefined,
+            nextRetryAt: undefined,
+            transaction,
+          });
         } catch (error) {
           if (processingEpoch !== processingEpochRef.current) break;
-          const message = error instanceof Error ? error.message : String(error);
-          const failed = attempts >= 5;
+          const aiError = error instanceof AiRequestError ? error : null;
+          const kind = aiError?.kind ?? 'server';
+          const attempts = media.attempts + (kind === 'server' ? 1 : 0);
+          const message = aiError?.message ?? (error instanceof Error ? error.message : String(error));
+          const failed = kind === 'too_large' || kind === 'invalid' ||
+            (kind === 'server' && attempts >= 5);
+          if (kind === 'auth') authPausedRef.current = true;
+          const nextRetryAt = kind === 'limit'
+            ? new Date(Date.now() + 30 * 60 * 1000).toISOString()
+            : undefined;
           await updateMedia({
             ...media,
             status: failed ? 'failed' : 'pending_ai',
             attempts,
-            error: message,
+            error: kind === 'limit' || kind === 'auth' ? undefined : message,
+            errorKind: kind,
+            nextRetryAt,
           });
-          if (failed || !navigator.onLine) break;
-          await new Promise((resolve) => window.setTimeout(resolve, 1000 * 2 ** (attempts - 1)));
+          if (kind === 'limit') {
+            if (retryTimerRef.current !== null) window.clearTimeout(retryTimerRef.current);
+            retryTimerRef.current = window.setTimeout(() => {
+              retryTimerRef.current = null;
+              void processPending();
+            }, 30 * 60 * 1000);
+          }
+          if (failed || kind !== 'server' || !navigator.onLine) break;
+          await new Promise((resolve) => window.setTimeout(resolve, Math.min(60_000, 1000 * 2 ** (attempts - 1))));
         }
       }
     } finally {
@@ -215,6 +251,27 @@ export function usePendingMedia(userId?: string) {
     };
   }, [processPending]);
 
+  useEffect(() => () => {
+    if (retryTimerRef.current !== null) window.clearTimeout(retryTimerRef.current);
+  }, []);
+
+  useEffect(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'SIGNED_IN' && session) {
+        userIdRef.current = session.user.id;
+        authPausedRef.current = false;
+        window.setTimeout(() => void processPending(), 0);
+      } else if (
+        session?.user.id === userIdRef.current &&
+        (event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED')
+      ) {
+        authPausedRef.current = false;
+        window.setTimeout(() => void processPending(), 0);
+      }
+    });
+    return () => subscription.unsubscribe();
+  }, [processPending]);
+
   const queueMedia = useCallback(async (
     type: PendingMedia['type'],
     blob: Blob,
@@ -238,7 +295,14 @@ export function usePendingMedia(userId?: string) {
   const retryMedia = useCallback(async (id: string) => {
     const item = (await getPendingMediaForUser(userId ?? '')).find((media) => media.id === id);
     if (!item) return;
-    await updateMedia({ ...item, attempts: 0, status: 'pending_ai', error: undefined });
+    await updateMedia({
+      ...item,
+      attempts: 0,
+      status: 'pending_ai',
+      error: undefined,
+      errorKind: undefined,
+      nextRetryAt: undefined,
+    });
     if (navigator.onLine) void processPending();
   }, [processPending, updateMedia, userId]);
 

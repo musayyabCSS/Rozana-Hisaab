@@ -14,6 +14,52 @@ interface ScanModalProps {
   onCaptureMedia: (blob: Blob) => Promise<void>;
 }
 
+const MAX_IMAGE_BASE64_LENGTH = 7_000_000;
+
+function loadImage(url: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => resolve(image);
+    image.onerror = () => reject(new Error('Could not decode receipt image.'));
+    image.src = url;
+  });
+}
+
+function canvasToJpeg(canvas: HTMLCanvasElement, quality: number): Promise<Blob> {
+  return new Promise((resolve, reject) => {
+    canvas.toBlob(
+      (blob) => blob ? resolve(blob) : reject(new Error('Could not encode receipt image.')),
+      'image/jpeg',
+      quality,
+    );
+  });
+}
+
+async function downscaleReceiptPhoto(source: Blob): Promise<Blob> {
+  const objectUrl = URL.createObjectURL(source);
+  try {
+    const image = await loadImage(objectUrl);
+    const longestSide = Math.max(image.naturalWidth, image.naturalHeight);
+    if (!longestSide) throw new Error('Receipt image has invalid dimensions.');
+    const scale = Math.min(1, 1600 / longestSide);
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
+    canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
+    const context = canvas.getContext('2d');
+    if (!context) throw new Error('Could not prepare receipt image for processing.');
+    context.drawImage(image, 0, 0, canvas.width, canvas.height);
+
+    for (let quality = 0.8; quality >= 0.1; quality = Math.round((quality - 0.1) * 10) / 10) {
+      const compressed = await canvasToJpeg(canvas, quality);
+      const base64Length = 4 * Math.ceil(compressed.size / 3) + 'data:image/jpeg;base64,'.length;
+      if (base64Length < MAX_IMAGE_BASE64_LENGTH) return compressed;
+    }
+    throw new Error('Receipt photo remains too large after compression.');
+  } finally {
+    URL.revokeObjectURL(objectUrl);
+  }
+}
+
 export function ScanModal({ open, onClose, language, dir, onCaptureMedia }: ScanModalProps) {
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [cameraReady, setCameraReady] = useState(false);
@@ -83,18 +129,22 @@ export function ScanModal({ open, onClose, language, dir, onCaptureMedia }: Scan
 
   useEffect(() => () => stopCamera(), [stopCamera]);
 
-  const savePhoto = async (blob: Blob, previewUrl: string) => {
+  const savePhoto = async (blob: Blob) => {
     setSaving(true);
     setCaptureError(null);
     try {
-      await onCaptureMediaRef.current(blob);
-      setCapturedImage(previewUrl);
+      const compressedBlob = await downscaleReceiptPhoto(blob);
+      await onCaptureMediaRef.current(compressedBlob);
+      setCapturedImage(URL.createObjectURL(compressedBlob));
       setWaitingForInternet(!navigator.onLine);
       stopCamera();
     } catch (error) {
       console.error('Could not save receipt photo locally:', error);
-      setCaptureError(tr('mediaLocalSaveFailed', language));
-      URL.revokeObjectURL(previewUrl);
+      setCaptureError(
+        error instanceof Error && error.message.includes('too large')
+          ? tr('mediaTooLargeReceipt', language)
+          : tr('mediaLocalSaveFailed', language),
+      );
     } finally {
       setSaving(false);
     }
@@ -121,7 +171,7 @@ export function ScanModal({ open, onClose, language, dir, onCaptureMedia }: Scan
         setCaptureError(tr('cameraCaptureFailed', language));
         return;
       }
-      void savePhoto(blob, URL.createObjectURL(blob));
+      void savePhoto(blob);
     }, 'image/jpeg', 0.88);
   };
 
@@ -137,7 +187,7 @@ export function ScanModal({ open, onClose, language, dir, onCaptureMedia }: Scan
       const response = await fetch(photo.webPath);
       if (!response.ok) throw new Error(`Could not read the captured photo (${response.status}).`);
       const blob = await response.blob();
-      await savePhoto(blob, URL.createObjectURL(blob));
+      await savePhoto(blob);
     } catch (error) {
       console.error('Native camera or gallery selection failed:', error);
       const name = error instanceof Error ? error.name : '';
@@ -163,8 +213,7 @@ export function ScanModal({ open, onClose, language, dir, onCaptureMedia }: Scan
     const file = event.target.files?.[0];
     event.target.value = '';
     if (!file) return;
-    const previewUrl = URL.createObjectURL(file);
-    void savePhoto(file, previewUrl);
+    void savePhoto(file);
   };
 
   const handleRetake = () => {

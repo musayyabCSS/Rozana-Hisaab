@@ -26,6 +26,10 @@ export const t: Dict = {
   // Voice modal
   voiceTitle: { en: 'Voice Input', ur: 'آواز سے اندراج' },
   voiceListening: { en: 'Listening...', ur: 'سن رہا ہوں...' },
+  voiceMaxDuration: {
+    en: 'Time remaining. Recording stops at 60 seconds.',
+    ur: 'باقی وقت۔ ریکارڈنگ 60 سیکنڈ پر رک جائے گی۔',
+  },
   voiceTranscript: { en: 'Transcript', ur: 'تحریر' },
   voiceExtracted: { en: 'AI Extracted Data', ur: 'اے آئی نکالا ہوا ڈیٹا' },
   voiceExample: { en: 'Try: "2500 ka petrol karwaya shell se"', ur: 'مثال: "۲۵۰۰ کا پیٹرول کرایا شیل سے"' },
@@ -167,6 +171,30 @@ export const t: Dict = {
   mediaSaveTransaction: { en: 'Save Transaction', ur: 'لین دین محفوظ کریں' },
   mediaDiscard: { en: 'Delete clip or photo', ur: 'کلپ یا تصویر حذف کریں' },
   mediaFailure: { en: 'Could not process this media. You can retry or delete it.', ur: 'اس میڈیا پر کارروائی نہیں ہو سکی۔ دوبارہ کوشش کریں یا اسے حذف کریں۔' },
+  mediaDailyLimit: {
+    en: 'Daily AI limit reached. Your recording is saved and will be processed later.',
+    ur: 'روزانہ AI کی حد پوری ہو گئی ہے۔ آپ کی ریکارڈنگ محفوظ ہے اور بعد میں پراسیس ہوگی۔',
+  },
+  mediaSignInRequired: {
+    en: 'Please sign in again to process your recordings.',
+    ur: 'اپنی ریکارڈنگز پراسیس کرنے کے لیے دوبارہ سائن اِن کریں۔',
+  },
+  mediaTooLargeVoice: {
+    en: 'This recording is too large to process. You can discard it from this device.',
+    ur: 'یہ ریکارڈنگ پراسیس کے لیے بہت بڑی ہے۔ آپ اسے اس ڈیوائس سے حذف کر سکتے ہیں۔',
+  },
+  mediaTooLargeReceipt: {
+    en: 'This photo is too large to process. You can discard it from this device.',
+    ur: 'یہ تصویر پراسیس کے لیے بہت بڑی ہے۔ آپ اسے اس ڈیوائس سے حذف کر سکتے ہیں۔',
+  },
+  mediaInvalid: {
+    en: 'This recording or photo could not be processed. You can discard it.',
+    ur: 'اس ریکارڈنگ یا تصویر پر پراسیس نہیں ہو سکا۔ آپ اسے حذف کر سکتے ہیں۔',
+  },
+  mediaRetryLater: {
+    en: 'AI service is temporarily unavailable. Your media will be retried.',
+    ur: 'AI سروس عارضی طور پر دستیاب نہیں۔ میڈیا پر دوبارہ کوشش کی جائے گی۔',
+  },
   settingsTitle: { en: 'Settings', ur: 'ترتیبات' },
   settingsDeleteMedia: { en: 'Delete my media', ur: 'میڈیا حذف کریں' },
   settingsDeleteMediaHelp: { en: 'Remove saved voice clips and receipt photos from this device.', ur: 'اس ڈیوائس سے محفوظ آواز کے کلپس اور رسیدوں کی تصاویر حذف کریں۔' },
@@ -178,21 +206,21 @@ export const t: Dict = {
   settingsConfirmDeleteMedia: { en: 'Delete permanently', ur: 'ہمیشہ کے لیے حذف کریں' },
   settingsCancel: { en: 'Cancel', ur: 'منسوخ کریں' },
   privacyDeviceTransactions: {
-    en: 'Text details of each entry, including bill and account numbers, are backed up to your Supabase account for access across devices.',
-    ur: 'ہر اندراج کی متنی تفصیلات، بشمول بل اور اکاؤنٹ نمبر، مختلف آلات پر رسائی کے لیے آپ کے Supabase اکاؤنٹ میں بیک اپ کی جاتی ہیں۔',
+    en: 'The text details of each entry (title, amount, category, vendor, items, bill and account numbers) are backed up to your account.',
+    ur: 'ہر اندراج کی متنی تفصیلات (عنوان، رقم، زمرہ، فروخت کنندہ، اشیا، بل اور اکاؤنٹ نمبر) آپ کے اکاؤنٹ میں بیک اپ کی جاتی ہیں۔',
   },
   privacyMediaProcessing: {
-    en: 'Photos and voice recordings are stored on your device only. If you choose AI processing, that photo or recording is sent to our AI service to extract text and is not stored on our servers afterwards. Photos and audio are not stored in Supabase.',
-    ur: 'تصاویر اور آواز کی ریکارڈنگ صرف آپ کے آلے پر محفوظ ہوتی ہیں۔ اگر آپ AI پراسیسنگ منتخب کریں تو متن نکالنے کے لیے وہ تصویر یا ریکارڈنگ ہماری AI سروس کو بھیجی جاتی ہے اور اس کے بعد ہمارے سرورز پر محفوظ نہیں رہتی۔ تصاویر اور آڈیو Supabase میں محفوظ نہیں ہوتے۔',
+    en: 'When you choose to speak or scan a receipt, that voice clip or photo is sent through our server to OpenAI to extract the text. We do not store it. OpenAI processes it under its own API data terms. Your voice recordings and receipt photos stay on your device only.',
+    ur: 'جب آپ بولنے یا رسید اسکین کرنے کا انتخاب کرتے ہیں تو متن نکالنے کے لیے وہ آواز کا کلپ یا تصویر ہمارے سرور کے ذریعے OpenAI کو بھیجی جاتی ہے۔ ہم اسے محفوظ نہیں کرتے۔ OpenAI اسے اپنی API ڈیٹا شرائط کے تحت پراسیس کرتا ہے۔ آپ کی آواز کی ریکارڈنگز اور رسیدوں کی تصاویر صرف آپ کے آلے پر رہتی ہیں۔',
   },
   privacyDeleteSettings: {
-    en: 'You can delete your data and media from Settings.',
-    ur: 'آپ ترتیبات سے اپنا ڈیٹا اور میڈیا حذف کر سکتے ہیں۔',
+    en: 'You can delete your data from Settings and delete media using Delete my media.',
+    ur: 'آپ ترتیبات سے اپنا ڈیٹا حذف کر سکتے ہیں اور میڈیا حذف کریں کا اختیار استعمال کرکے میڈیا حذف کر سکتے ہیں۔',
   },
   consentTitle: { en: 'AI processing consent', ur: 'AI پراسیسنگ کی اجازت' },
   consentDescription: {
-    en: 'When you record or scan, that single clip or photo is sent to our AI processing service to extract text, and is not stored on our servers afterwards. Continue to allow this processing?',
-    ur: 'ریکارڈ یا اسکین کرنے پر صرف وہی کلپ یا تصویر متن نکالنے کے لیے ہماری AI سروس کو بھیجی جاتی ہے اور اس کے بعد ہمارے سرورز پر محفوظ نہیں رہتی۔ کیا آپ اس پراسیسنگ کی اجازت دیتے ہیں؟',
+    en: 'When you choose to speak or scan a receipt, that voice clip or photo is sent through our server to OpenAI to extract the text. We do not store it. OpenAI processes it under its own API data terms. Your voice recordings and receipt photos stay on your device only. The text details of each entry (title, amount, category, vendor, items, bill and account numbers) are backed up to your account. You can delete your media from Settings. Continue?',
+    ur: 'جب آپ بولنے یا رسید اسکین کرنے کا انتخاب کرتے ہیں تو متن نکالنے کے لیے وہ آواز کا کلپ یا تصویر ہمارے سرور کے ذریعے OpenAI کو بھیجی جاتی ہے۔ ہم اسے محفوظ نہیں کرتے۔ OpenAI اسے اپنی API ڈیٹا شرائط کے تحت پراسیس کرتا ہے۔ آپ کی آواز کی ریکارڈنگز اور رسیدوں کی تصاویر صرف آپ کے آلے پر رہتی ہیں۔ ہر اندراج کی متنی تفصیلات (عنوان، رقم، زمرہ، فروخت کنندہ، اشیا، بل اور اکاؤنٹ نمبر) آپ کے اکاؤنٹ میں بیک اپ کی جاتی ہیں۔ آپ ترتیبات سے اپنا میڈیا حذف کر سکتے ہیں۔ کیا آپ جاری رکھنا چاہتے ہیں؟',
   },
   consentContinue: { en: 'Continue', ur: 'جاری رکھیں' },
   consentCancel: { en: 'Cancel', ur: 'منسوخ کریں' },

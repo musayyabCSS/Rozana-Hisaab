@@ -46,17 +46,22 @@ export function PendingMediaReviewModal({
       {media?.status === 'failed' ? (
         <div className="space-y-4">
           <p role="alert" className="text-sm text-amber-300">
-            {tr('mediaFailure', language)}
+            {media.errorKind === 'too_large'
+              ? tr(media.type === 'voice' ? 'mediaTooLargeVoice' : 'mediaTooLargeReceipt', language)
+              : media.errorKind === 'invalid'
+                ? tr('mediaInvalid', language)
+                : tr('mediaFailure', language)}
           </p>
-          {media.error && <p className="break-words text-xs text-slate-400">{media.error}</p>}
           <div className="flex gap-3">
-            <button
-              type="button"
-              onClick={() => onRetry(media.id)}
-              className="flex-1 rounded-xl bg-emerald-500 px-4 py-3 text-sm font-semibold text-slate-950"
-            >
-              {tr('mediaRetry', language)}
-            </button>
+            {media.errorKind === 'server' && (
+              <button
+                type="button"
+                onClick={() => onRetry(media.id)}
+                className="flex-1 rounded-xl bg-emerald-500 px-4 py-3 text-sm font-semibold text-slate-950"
+              >
+                {tr('mediaRetry', language)}
+              </button>
+            )}
             <button
               type="button"
               onClick={() => onDiscard(media.id)}

@@ -538,7 +538,15 @@ function App() {
           aria-live="polite"
           className="fixed bottom-40 left-1/2 z-40 -translate-x-1/2 rounded-full border border-amber-500/30 bg-slate-900/95 px-4 py-2 text-xs text-amber-300 shadow-xl"
         >
-          {navigator.onLine ? tr('mediaProcessing', language) : tr('waitingForInternet', language)}
+          {pendingMedia.some((item) => item.errorKind === 'auth')
+            ? tr('mediaSignInRequired', language)
+            : pendingMedia.some((item) => item.errorKind === 'limit')
+              ? tr('mediaDailyLimit', language)
+              : pendingMedia.some((item) => item.errorKind === 'server')
+                ? tr('mediaRetryLater', language)
+                : navigator.onLine
+                  ? tr('mediaProcessing', language)
+                  : tr('waitingForInternet', language)}
         </div>
       )}
       <Header
