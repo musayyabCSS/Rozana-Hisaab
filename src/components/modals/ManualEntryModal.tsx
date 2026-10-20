@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ArrowDownLeft, ArrowUpRight } from 'lucide-react';
 import { Modal } from '@/components/ui/Modal';
 import type { Language, TransactionType, Category, PaymentMethod, NewTransaction } from '@/types';
@@ -11,12 +11,13 @@ interface ManualEntryModalProps {
   onClose: () => void;
   language: Language;
   dir: 'ltr' | 'rtl';
-  onSave: (txn: NewTransaction) => void;
+  initialDraft?: Partial<NewTransaction> | null;
+  onSave: (txn: NewTransaction) => void | Promise<void>;
 }
 
 const PAYMENT_METHODS: PaymentMethod[] = ['cash', 'bank', 'easypaisa', 'jazzcash', 'card'];
 
-export function ManualEntryModal({ open, onClose, language, dir, onSave }: ManualEntryModalProps) {
+export function ManualEntryModal({ open, onClose, language, dir, initialDraft, onSave }: ManualEntryModalProps) {
   const [type, setType] = useState<TransactionType>('expense');
   const [amount, setAmount] = useState('');
   const [category, setCategory] = useState<Category>('fuel');
@@ -26,16 +27,32 @@ export function ManualEntryModal({ open, onClose, language, dir, onSave }: Manua
 
   const categories = type === 'income' ? INCOME_CATEGORIES : EXPENSE_CATEGORIES;
 
+  useEffect(() => {
+    if (!open || !initialDraft) return;
+    const nextType = initialDraft.type ?? 'expense';
+    const nextCategories = nextType === 'income' ? INCOME_CATEGORIES : EXPENSE_CATEGORIES;
+    const resolvedCategory = getCategoryDetails(initialDraft.category).id;
+    setType(nextType);
+    setAmount(initialDraft.amount && initialDraft.amount > 0 ? String(initialDraft.amount) : '');
+    setCategory(
+      nextCategories.find((candidate) => candidate === resolvedCategory) ??
+        (nextType === 'income' ? INCOME_CATEGORIES[0] : EXPENSE_CATEGORIES[0]),
+    );
+    setTitle(initialDraft.title ?? '');
+    setPaymentMethod(initialDraft.payment_method ?? null);
+    setDate(initialDraft.transaction_date ?? new Date().toISOString().split('T')[0]);
+  }, [initialDraft, open]);
+
   const handleTypeChange = (newType: TransactionType) => {
     setType(newType);
     const cats = newType === 'income' ? INCOME_CATEGORIES : EXPENSE_CATEGORIES;
     setCategory(cats[0]);
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     const amt = Number(amount);
     if (amt <= 0 || !title.trim() || !date) return;
-    onSave({
+    await onSave({
       type,
       amount: amt,
       category,
@@ -44,6 +61,7 @@ export function ManualEntryModal({ open, onClose, language, dir, onSave }: Manua
       source: 'manual',
       transaction_date: date,
       is_paid: !isFutureDate(date),
+      ...(initialDraft?.has_receipt ? { has_receipt: true } : {}),
     });
     // Reset
     setType('expense');

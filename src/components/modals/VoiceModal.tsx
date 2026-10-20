@@ -1,16 +1,19 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AlertCircle, Loader2, Mic, Square, Volume2 } from 'lucide-react';
 import { Modal } from '@/components/ui/Modal';
-import type { Language } from '@/types';
+import type { Language, NewTransaction, Transaction } from '@/types';
 import { tr } from '@/lib/i18n';
 import { AUDIO_BITRATE, getMicrophoneConstraints, pickAudioMimeType } from '@/lib/audioRecorder';
+import { MediaProcessingError } from '@/lib/mediaProcessing';
 
 interface VoiceModalProps {
   open: boolean;
   onClose: () => void;
   language: Language;
   dir: 'ltr' | 'rtl';
-  onCaptureMedia: (blob: Blob) => Promise<boolean>;
+  onCaptureMedia: (blob: Blob) => Promise<Transaction>;
+  onReview: (transaction: Transaction, blob: Blob) => void;
+  onSwitchToManual: (prefill: Partial<NewTransaction>) => void;
 }
 
 function formatTimer(seconds: number): string {
@@ -21,24 +24,43 @@ function formatTimer(seconds: number): string {
 
 const MAX_RECORDING_SECONDS = 60;
 
-export function VoiceModal({ open, onClose, language, dir, onCaptureMedia }: VoiceModalProps) {
+export function VoiceModal({
+  open,
+  onClose,
+  language,
+  dir,
+  onCaptureMedia,
+  onReview,
+  onSwitchToManual,
+}: VoiceModalProps) {
   const [recording, setRecording] = useState(false);
   const [processing, setProcessing] = useState(false);
   const [processingStep, setProcessingStep] = useState(0);
-  const [queuedOffline, setQueuedOffline] = useState(false);
   const [recordSeconds, setRecordSeconds] = useState(0);
-  const [waitingForInternet, setWaitingForInternet] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const recorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const timerRef = useRef<number | null>(null);
   const stopRecordingRef = useRef<() => void>(() => {});
+  const capturedBlobRef = useRef<Blob | null>(null);
+  const manualPrefillRef = useRef<Partial<NewTransaction>>({
+    type: 'expense',
+    amount: 0,
+    category: 'misc_expense',
+    title: '',
+    source: 'voice',
+  });
+  const progressTimerRef = useRef<number | null>(null);
   const requestIdRef = useRef(0);
   const openRef = useRef(open);
   const onCaptureMediaRef = useRef(onCaptureMedia);
+  const onReviewRef = useRef(onReview);
+  const onSwitchToManualRef = useRef(onSwitchToManual);
   openRef.current = open;
   onCaptureMediaRef.current = onCaptureMedia;
+  onReviewRef.current = onReview;
+  onSwitchToManualRef.current = onSwitchToManual;
 
   const releaseMicrophone = useCallback(() => {
     streamRef.current?.getTracks().forEach((track) => track.stop());
@@ -50,10 +72,39 @@ export function VoiceModal({ open, onClose, language, dir, onCaptureMedia }: Voi
     timerRef.current = null;
   }, []);
 
+  const processCapturedBlob = useCallback(async (blob: Blob) => {
+    setProcessing(true);
+    setError(null);
+    setProcessingStep(0);
+    const processingStartedAt = Date.now();
+    progressTimerRef.current = window.setInterval(() => {
+      const elapsed = Date.now() - processingStartedAt;
+      setProcessingStep(elapsed < 1800 ? 0 : elapsed < 3500 ? 1 : 2);
+    }, 150);
+    try {
+      const transaction = await onCaptureMediaRef.current(blob);
+      onReviewRef.current(transaction, blob);
+    } catch (processError) {
+      console.error('Could not process voice recording:', processError);
+      if (processError instanceof MediaProcessingError) {
+        manualPrefillRef.current = processError.manualPrefill;
+      }
+      setError(language === 'ur'
+        ? 'کنکشن ناکام ہو گیا۔ براہ کرم اپنا انٹرنیٹ کنکشن چیک کریں۔'
+        : 'Connection failed. Please check your internet connection.');
+    } finally {
+      if (progressTimerRef.current !== null) window.clearInterval(progressTimerRef.current);
+      progressTimerRef.current = null;
+      setProcessing(false);
+      setProcessingStep(0);
+      setRecording(false);
+      releaseMicrophone();
+    }
+  }, [language, releaseMicrophone]);
+
   const startRecordingRef = useRef<() => Promise<void>>(async () => {});
   startRecordingRef.current = async () => {
     setError(null);
-    setWaitingForInternet(false);
     setRecordSeconds(0);
     const requestId = ++requestIdRef.current;
     try {
@@ -79,29 +130,8 @@ export function VoiceModal({ open, onClose, language, dir, onCaptureMedia }: Voi
           type: recorder.mimeType || mimeType || 'audio/webm',
         });
         chunksRef.current = [];
-        const processingStartedAt = Date.now();
-        setProcessingStep(0);
-        const progressTimer = window.setInterval(() => {
-          const elapsed = Date.now() - processingStartedAt;
-          setProcessingStep(elapsed < 1800 ? 0 : elapsed < 3500 ? 1 : 2);
-        }, 150);
-        void onCaptureMediaRef.current(blob).then((processed) => {
-          if (!processed) {
-            setQueuedOffline(true);
-            setWaitingForInternet(true);
-          }
-        }).catch((saveError: unknown) => {
-          console.error('Could not save voice recording locally:', saveError);
-          setError(language === 'ur'
-            ? 'لین دین کا تجزیہ نہیں ہو سکا۔ دوبارہ کوشش کریں۔'
-            : 'Could not analyze the transaction. Please try again.');
-        }).finally(() => {
-          window.clearInterval(progressTimer);
-          setProcessing(false);
-          setProcessingStep(0);
-          setRecording(false);
-          releaseMicrophone();
-        });
+        capturedBlobRef.current = blob;
+        void processCapturedBlob(blob);
       };
       recorderRef.current = recorder;
       recorder.start();
@@ -144,9 +174,12 @@ export function VoiceModal({ open, onClose, language, dir, onCaptureMedia }: Voi
     }
     recorderRef.current = null;
     chunksRef.current = [];
+    capturedBlobRef.current = null;
     releaseMicrophone();
     setRecording(false);
     setProcessing(false);
+    if (progressTimerRef.current !== null) window.clearInterval(progressTimerRef.current);
+    progressTimerRef.current = null;
   }, [clearTimer, open, releaseMicrophone]);
 
   useEffect(() => () => {
@@ -156,6 +189,7 @@ export function VoiceModal({ open, onClose, language, dir, onCaptureMedia }: Voi
       recorderRef.current.onstop = null;
       recorderRef.current.stop();
     }
+    if (progressTimerRef.current !== null) window.clearInterval(progressTimerRef.current);
     releaseMicrophone();
   }, [clearTimer, releaseMicrophone]);
 
@@ -173,6 +207,16 @@ export function VoiceModal({ open, onClose, language, dir, onCaptureMedia }: Voi
   };
   stopRecordingRef.current = handleStop;
 
+  const retryProcessing = () => {
+    if (capturedBlobRef.current) void processCapturedBlob(capturedBlobRef.current);
+  };
+
+  const switchToManual = () => {
+    const prefill = manualPrefillRef.current;
+    handleClose();
+    onSwitchToManualRef.current(prefill);
+  };
+
   const handleClose = () => {
     requestIdRef.current += 1;
     clearTimer();
@@ -182,11 +226,12 @@ export function VoiceModal({ open, onClose, language, dir, onCaptureMedia }: Voi
     }
     recorderRef.current = null;
     chunksRef.current = [];
+    if (progressTimerRef.current !== null) window.clearInterval(progressTimerRef.current);
+    progressTimerRef.current = null;
     releaseMicrophone();
     setRecording(false);
     setProcessing(false);
-    setQueuedOffline(false);
-    setWaitingForInternet(false);
+    capturedBlobRef.current = null;
     setError(null);
     onClose();
   };
@@ -215,17 +260,6 @@ export function VoiceModal({ open, onClose, language, dir, onCaptureMedia }: Voi
                   ? language === 'ur' ? '🧠 Hisaab samajh rahe hain...' : '🧠 Extracting amounts & categories...'
                   : '✨ Preparing review...'}
             </p>
-          </div>
-        ) : queuedOffline ? (
-          <div role="status" className="flex min-h-56 flex-col items-center justify-center text-center">
-            <p className="text-sm font-semibold text-amber-300">
-              {language === 'ur'
-                ? 'Internet connect nahi hai. Offline save ho gaya hai.'
-                : '📶 Internet disconnected. Saved locally and will process when you reconnect.'}
-            </p>
-            <button type="button" onClick={handleClose} className="mt-5 rounded-xl border border-slate-700 px-5 py-2.5 text-sm text-slate-200">
-              {language === 'ur' ? 'بند کریں' : 'Close'}
-            </button>
           </div>
         ) : (
         <>
@@ -263,16 +297,21 @@ export function VoiceModal({ open, onClose, language, dir, onCaptureMedia }: Voi
           </>
         )}
 
-        {waitingForInternet && (
-          <p role="status" className="mt-4 rounded-full border border-amber-500/30 bg-amber-500/10 px-3 py-1.5 text-xs text-amber-300">
-            {tr('waitingForInternet', language)}
-          </p>
-        )}
         {error && (
           <p role="alert" className="mt-4 flex max-w-xs items-center gap-1.5 text-center text-sm text-amber-400">
             <AlertCircle size={14} className="shrink-0" />
             {error}
           </p>
+        )}
+        {error && capturedBlobRef.current && (
+          <div className="mt-4 flex w-full max-w-xs gap-2">
+            <button type="button" onClick={retryProcessing} className="flex-1 rounded-xl bg-emerald-500 px-3 py-2.5 text-sm font-semibold text-slate-950">
+              🔄 {language === 'ur' ? 'دوبارہ کوشش کریں' : 'Retry'}
+            </button>
+            <button type="button" onClick={switchToManual} className="flex-1 rounded-xl border border-slate-700 px-3 py-2.5 text-sm text-slate-200">
+              ✏️ {language === 'ur' ? 'دستی اندراج' : 'Switch to Manual Add'}
+            </button>
+          </div>
         )}
         </>
         )}

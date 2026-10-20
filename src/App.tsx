@@ -16,23 +16,37 @@ import { BankStatementModal } from '@/components/modals/BankStatementModal';
 import { ExportModal } from '@/components/modals/ExportModal';
 import { EditTransactionModal } from '@/components/modals/EditTransactionModal';
 import { SetNewPasswordModal } from '@/components/modals/SetNewPasswordModal';
-import { PendingMediaReviewModal } from '@/components/modals/PendingMediaReviewModal';
+import { TransactionReviewModal } from '@/components/modals/TransactionReviewModal';
 import { PrivacyConsentModal } from '@/components/modals/PrivacyConsentModal';
 import { SettingsModal } from '@/components/modals/SettingsModal';
+import { Modal } from '@/components/ui/Modal';
 import { useLanguage } from '@/hooks/useLanguage';
 import { useTransactions } from '@/hooks/useTransactions';
 import { useProfile } from '@/hooks/useProfile';
-import { usePendingMedia } from '@/hooks/usePendingMedia';
 import { getMonthStats } from '@/lib/format';
-import { tr } from '@/lib/i18n';
-import { saveReceiptBlob } from '@/lib/receiptStorage';
+import { deleteAllReceiptImages, saveReceiptBlob } from '@/lib/receiptStorage';
+import { processReceiptBlob, processVoiceBlob, type MediaReviewDraft } from '@/lib/mediaProcessing';
+import { clearLegacyPendingMedia } from '@/lib/localStore';
 import type { NewTransaction, Transaction } from '@/types';
-import type { PendingMedia } from '@/lib/localStore';
 
 type ModalType = 'voice' | 'scan' | 'add' | 'bank' | 'export' | 'settings' | null;
 
 const REFRESH_THRESHOLD = 65;
 const MAX_PULL_DISTANCE = 80;
+const AI_REQUEST_TIMEOUT_MS = 30_000;
+
+function withTimeout<T>(promise: Promise<T>): Promise<T> {
+  let timeoutId: number | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timeoutId = window.setTimeout(
+      () => reject(new Error('AI request timed out. Please check your internet connection and retry.')),
+      AI_REQUEST_TIMEOUT_MS,
+    );
+  });
+  return Promise.race([promise, timeout]).finally(() => {
+    if (timeoutId !== undefined) window.clearTimeout(timeoutId);
+  });
+}
 
 function App() {
   // --- SUPABASE AUTH STATE ---
@@ -54,16 +68,6 @@ function App() {
     offlineSavedNotice,
   } = useTransactions(session?.user.id);
   const {
-    pendingMedia,
-    pendingCount,
-    isProcessing: isProcessingMedia,
-    queueMedia,
-    retryMedia,
-    removeMedia,
-    deleteMyMedia,
-    clearAllPending,
-  } = usePendingMedia(session?.user.id);
-  const {
     profile,
     onboarded,
     loading: loadingProfile,
@@ -74,8 +78,10 @@ function App() {
   const [activeModal, setActiveModal] = useState<ModalType>(null);
   const [captureConsentOpen, setCaptureConsentOpen] = useState(false);
   const [captureRequested, setCaptureRequested] = useState<'voice' | 'scan' | null>(null);
-  const [dismissedMediaId, setDismissedMediaId] = useState<string | null>(null);
-  const [realtimeReviewMedia, setRealtimeReviewMedia] = useState<PendingMedia | null>(null);
+  const [offlineCapturePrompt, setOfflineCapturePrompt] = useState(false);
+  const [reviewMedia, setReviewMedia] = useState<MediaReviewDraft | null>(null);
+  const [manualDraft, setManualDraft] = useState<Partial<NewTransaction> | null>(null);
+  const manualReceiptBlobRef = useRef<Blob | null>(null);
   const consentAcceptedRef = useRef(
     typeof localStorage !== 'undefined' && localStorage.getItem('rozana-ai-media-consent') === 'true',
   );
@@ -90,27 +96,17 @@ function App() {
   const touchStartRef = useRef<{ x: number; y: number } | null>(null);
   const pullDistanceRef = useRef(0);
   const thresholdReachedRef = useRef(false);
-  const reviewMedia =
-    (realtimeReviewMedia?.id !== dismissedMediaId ? realtimeReviewMedia : null) ??
-    pendingMedia.find(
-      (item) =>
-        item.id !== dismissedMediaId &&
-        (item.status === 'done' || item.status === 'failed'),
-    ) ?? null;
-
   useEffect(() => {
-    const handleProcessedMedia = (event: Event) => {
-      const mediaEvent = event as CustomEvent<PendingMedia>;
-      if (mediaEvent.detail?.userId === session?.user.id && mediaEvent.detail.transaction) {
-        setDismissedMediaId(null);
-        setRealtimeReviewMedia(mediaEvent.detail);
-      }
-    };
-    window.addEventListener('pending-media-processed', handleProcessedMedia);
-    return () => window.removeEventListener('pending-media-processed', handleProcessedMedia);
-  }, [session?.user.id]);
+    void clearLegacyPendingMedia().catch((error: unknown) => {
+      console.error('Could not clear old pending-media records:', error);
+    });
+  }, []);
 
   const requestCapture = (capture: 'voice' | 'scan') => {
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      setOfflineCapturePrompt(true);
+      return;
+    }
     if (consentAcceptedRef.current) {
       setActiveModal(capture);
       return;
@@ -127,11 +123,15 @@ function App() {
       console.error('Could not save AI media consent on this device:', error);
     }
     setCaptureConsentOpen(false);
-    if (captureRequested) setActiveModal(captureRequested);
+    if (captureRequested && typeof navigator !== 'undefined' && !navigator.onLine) {
+      setOfflineCapturePrompt(true);
+    } else if (captureRequested) {
+      setActiveModal(captureRequested);
+    }
     setCaptureRequested(null);
   };
 
-  const handleMediaSave = async (media: PendingMedia, draft: Transaction): Promise<boolean> => {
+  const handleMediaSave = async (media: MediaReviewDraft, draft: Transaction): Promise<boolean> => {
     const transaction = await addTransaction({
       id: draft.id,
       type: draft.type,
@@ -151,16 +151,13 @@ function App() {
     if (media.type === 'receipt') {
       await saveReceiptBlob(transaction.id, media.blob);
     }
-    await removeMedia(media.id);
-    setDismissedMediaId(null);
-    setRealtimeReviewMedia(null);
     return true;
   };
 
   const nativeBackHandlerRef = useRef<() => void>(() => {});
   nativeBackHandlerRef.current = () => {
     if (reviewMedia) {
-      setDismissedMediaId(reviewMedia.id);
+      setReviewMedia(null);
     } else if (captureConsentOpen) {
       setCaptureConsentOpen(false);
       setCaptureRequested(null);
@@ -439,10 +436,24 @@ function App() {
 
   const handleSaveTransaction = useCallback(
     async (txn: NewTransaction) => {
-      await addTransaction(txn);
+      const receiptBlob = manualReceiptBlobRef.current;
+      const saved = await addTransaction(txn);
+      if (saved && receiptBlob) {
+        await saveReceiptBlob(saved.id, receiptBlob);
+      }
+      if (manualReceiptBlobRef.current === receiptBlob) manualReceiptBlobRef.current = null;
     },
     [addTransaction],
   );
+
+  const switchToManualEntry = (
+    prefill: Partial<NewTransaction>,
+    receiptBlob: Blob | null = null,
+  ) => {
+    manualReceiptBlobRef.current = receiptBlob;
+    setManualDraft(prefill);
+    setActiveModal('add');
+  };
 
   const handleBankImport = useCallback(
     async (txns: NewTransaction[]) => {
@@ -608,27 +619,6 @@ function App() {
           language={language}
           dir={dir}
         />
-        {pendingCount > 0 && isProcessingMedia && (
-          <div
-            role="status"
-            aria-live="polite"
-            className="flex items-center justify-between rounded-xl border border-emerald-500/20 bg-slate-900/90 px-3 py-2 text-xs text-emerald-200"
-          >
-            <span className="flex items-center gap-2">
-              <span className="h-2 w-2 animate-pulse rounded-full bg-emerald-400" />
-              {tr('mediaProcessing', language)}
-            </span>
-            <button
-              type="button"
-              onClick={() => void clearAllPending()}
-              aria-label={language === 'ur' ? 'محفوظ میڈیا کی قطار صاف کریں' : 'Clear pending media'}
-              className="rounded p-1 text-slate-400 hover:bg-slate-800 hover:text-slate-100"
-            >
-              ✕
-            </button>
-          </div>
-        )}
-
         <TransactionFeed
           transactions={transactions}
           language={language}
@@ -646,7 +636,11 @@ function App() {
         dir={dir}
         onScan={() => requestCapture('scan')}
         onVoice={() => requestCapture('voice')}
-        onAdd={() => setActiveModal('add')}
+        onAdd={() => {
+          manualReceiptBlobRef.current = null;
+          setManualDraft(null);
+          setActiveModal('add');
+        }}
         onExport={() => setActiveModal('export')}
       />
 
@@ -656,11 +650,12 @@ function App() {
         onClose={() => setActiveModal(null)}
         language={language}
         dir={dir}
-        onCaptureMedia={async (blob) => {
-          const processed = await queueMedia('voice', blob);
-          if (processed) setActiveModal(null);
-          return processed;
+        onCaptureMedia={(blob) => withTimeout(processVoiceBlob(blob))}
+        onReview={(transaction, blob) => {
+          setReviewMedia({ id: transaction.id, type: 'voice', blob, transaction });
+          setActiveModal(null);
         }}
+        onSwitchToManual={(prefill) => switchToManualEntry(prefill)}
       />
 
       <ScanModal
@@ -668,19 +663,25 @@ function App() {
         onClose={() => setActiveModal(null)}
         language={language}
         dir={dir}
-        onCaptureMedia={async (blob) => {
-          const processed = await queueMedia('receipt', blob);
-          if (processed) setActiveModal(null);
-          return processed;
+        onCaptureMedia={(blob) => withTimeout(processReceiptBlob(blob))}
+        onReview={(transaction, blob) => {
+          setReviewMedia({ id: transaction.id, type: 'receipt', blob, transaction });
+          setActiveModal(null);
         }}
+        onSwitchToManual={(prefill, receiptBlob) => switchToManualEntry(prefill, receiptBlob)}
       />
 
       <ManualEntryModal
         open={activeModal === 'add'}
-        onClose={() => setActiveModal(null)}
         language={language}
         dir={dir}
+        initialDraft={manualDraft}
         onSave={handleSaveTransaction}
+        onClose={() => {
+          setActiveModal(null);
+          setManualDraft(null);
+          manualReceiptBlobRef.current = null;
+        }}
       />
 
       <BankStatementModal
@@ -711,7 +712,7 @@ function App() {
         onClose={() => setActiveModal(null)}
         language={language}
         dir={dir}
-        onDeleteMedia={deleteMyMedia}
+        onDeleteMedia={deleteAllReceiptImages}
         onDeleteData={deleteAllTransactions}
       />
       <PrivacyConsentModal
@@ -724,25 +725,50 @@ function App() {
         language={language}
         dir={dir}
       />
-      <PendingMediaReviewModal
+      <TransactionReviewModal
         media={reviewMedia}
         language={language}
         dir={dir}
-        onRetry={(id) => {
-          setDismissedMediaId(null);
-          void retryMedia(id);
-        }}
-        onDiscard={(id) => {
-          void removeMedia(id);
-          setDismissedMediaId(null);
-          setRealtimeReviewMedia(null);
-        }}
+        onDiscard={() => setReviewMedia(null)}
         onSave={async (media, transaction) => {
           const saved = await handleMediaSave(media, transaction);
-          if (saved) setRealtimeReviewMedia(null);
+          if (saved) setReviewMedia(null);
           return saved;
         }}
       />
+      <Modal
+        open={offlineCapturePrompt}
+        onClose={() => setOfflineCapturePrompt(false)}
+        title={language === 'ur' ? 'انٹرنیٹ درکار ہے' : 'Internet connection required'}
+        dir={dir}
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-slate-300">
+            📶 Internet connection required for AI Voice &amp; Scan. Please connect to the internet, or tap below to add manually.
+          </p>
+          <div className="flex gap-3">
+            <button
+              type="button"
+              onClick={() => {
+                setOfflineCapturePrompt(false);
+                manualReceiptBlobRef.current = null;
+                setManualDraft(null);
+                setActiveModal('add');
+              }}
+              className="flex-1 rounded-xl bg-emerald-500 px-4 py-3 text-sm font-semibold text-slate-950"
+            >
+              Add Manually
+            </button>
+            <button
+              type="button"
+              onClick={() => setOfflineCapturePrompt(false)}
+              className="flex-1 rounded-xl border border-slate-700 px-4 py-3 text-sm text-slate-200"
+            >
+              Dismiss
+            </button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }

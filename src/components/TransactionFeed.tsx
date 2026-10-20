@@ -37,8 +37,7 @@ export function TransactionFeed({
   onUpdate,
 }: TransactionFeedProps) {
   const [receiptPreview, setReceiptPreview] = useState<string | null>(null);
-  const [receiptError, setReceiptError] = useState<{ id: string; message: string } | null>(null);
-  const [receiptUnavailableId, setReceiptUnavailableId] = useState<string | null>(null);
+  const [receiptUnavailable, setReceiptUnavailable] = useState(false);
   const [showAll, setShowAll] = useState(false);
   const [search, setSearch] = useState('');
   const [dateRange, setDateRange] = useState<'month' | '30days' | 'all'>('all');
@@ -53,12 +52,6 @@ export function TransactionFeed({
     },
     [receiptPreview],
   );
-
-  useEffect(() => {
-    if (!receiptError) return;
-    const timeoutId = window.setTimeout(() => setReceiptError(null), 3000);
-    return () => window.clearTimeout(timeoutId);
-  }, [receiptError]);
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -115,26 +108,16 @@ export function TransactionFeed({
   }, []);
 
   const showReceipt = async (transaction: Transaction) => {
-    setReceiptError(null);
-    setReceiptUnavailableId(null);
     try {
       const imageUrl = await getReceiptImage(transaction.id);
       if (!imageUrl) {
-        setReceiptUnavailableId(transaction.id);
+        setReceiptUnavailable(true);
         return;
       }
       setReceiptPreview(imageUrl);
     } catch (error) {
       console.error('Error loading receipt image:', error);
-      setReceiptError(
-        {
-          id: transaction.id,
-          message:
-            language === 'ur'
-              ? 'رسید کی تصویر لوڈ نہیں ہو سکی۔'
-              : 'Could not load receipt image.',
-        },
-      );
+      setReceiptUnavailable(true);
     }
   };
 
@@ -178,15 +161,18 @@ export function TransactionFeed({
     <div
       className={
         showAll
-          ? 'fixed inset-0 z-40 overflow-y-auto bg-slate-950 px-4 pb-4 pt-[max(env(safe-area-inset-top,0px),1rem)] sm:px-6 sm:pb-6'
+          ? 'fixed inset-0 z-40 flex h-[100dvh] flex-col overflow-hidden bg-[#0a0f1d] px-0 pt-[env(safe-area-inset-top,0px)]'
           : 'rounded-3xl bg-slate-900 border border-slate-800 p-4'
       }
     >
       <div
         className={`mx-auto ${
-          showAll ? 'max-w-3xl rounded-3xl bg-slate-900 border border-slate-800 p-4 sm:p-6' : ''
+          showAll
+            ? 'flex min-h-0 w-full max-w-3xl flex-1 flex-col overflow-hidden bg-[#0a0f1d] sm:border-x sm:border-white/5'
+            : ''
         }`}
       >
+      <div className={`${showAll ? 'sticky top-0 z-20 shrink-0 border-b border-white/5 bg-[#0a0f1d]/95 px-4 pb-2 pt-3 backdrop-blur-md sm:px-6' : ''}`}>
       <div className={`flex items-center justify-between mb-3 ${dir === 'rtl' ? 'flex-row-reverse' : ''}`}>
         <div className="flex items-center gap-2">
           {showAll && (
@@ -272,8 +258,10 @@ export function TransactionFeed({
           </button>
         ))}
       </div>
+      </div>
 
       {/* Transactions list */}
+      <div className={showAll ? 'min-h-0 flex-1 overflow-y-auto px-4 pb-20 pt-4 overscroll-contain sm:px-6' : ''}>
       {displayedTransactions.length === 0 ? (
         <div className="py-12 text-center">
           <p className="text-slate-500 text-sm">
@@ -387,7 +375,7 @@ export function TransactionFeed({
                             <button
                               type="button"
                               onClick={() => void showReceipt(txn)}
-                              className="rounded-lg p-1.5 text-slate-500 hover:bg-sky-500/10 hover:text-sky-400"
+                              className="rounded-lg p-1.5 text-slate-500 opacity-40 transition-opacity hover:bg-sky-500/10 hover:text-sky-400 hover:opacity-70"
                               aria-label={language === 'ur' ? 'رسید دیکھیں' : 'View receipt'}
                             >
                               <Camera size={15} />
@@ -411,20 +399,6 @@ export function TransactionFeed({
                           </button>
                         </div>
                       </div>
-                      {receiptError?.id === txn.id && (
-                        <div
-                          role="alert"
-                          className="mt-1 flex items-center gap-1.5 rounded-lg border border-rose-500/20 bg-rose-500/10 px-3 py-1.5 text-xs text-rose-400 animate-[fadeIn_0.2s_ease-out]"
-                        >
-                          <span aria-hidden="true">⚠️</span>
-                          <span>{receiptError.message}</span>
-                        </div>
-                      )}
-                      {receiptUnavailableId === txn.id && (
-                        <div className="mt-1 rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-xs text-slate-300">
-                          {tr('receiptStoredOnAnotherDevice', language)}
-                        </div>
-                      )}
                     </div>
                     );
                   })}
@@ -433,6 +407,7 @@ export function TransactionFeed({
             ))}
           </div>
       )}
+      </div>
 
       {receiptPreview && (
         <div
@@ -462,6 +437,27 @@ export function TransactionFeed({
           </div>
         </div>
       )}
+      <Modal
+        open={receiptUnavailable}
+        onClose={() => setReceiptUnavailable(false)}
+        title={language === 'ur' ? 'تصویر دستیاب نہیں' : 'Photo Unavailable'}
+        dir={dir}
+      >
+        <div className="space-y-4">
+          <p className="text-sm leading-relaxed text-slate-300">
+            {language === 'ur'
+              ? 'Yeh tasveer is device par dastiyab nahi hai.'
+              : 'This receipt image was saved locally on a previous install or device and is not available on this phone.'}
+          </p>
+          <button
+            type="button"
+            onClick={() => setReceiptUnavailable(false)}
+            className="w-full rounded-xl bg-emerald-500 px-4 py-3 text-sm font-semibold text-slate-950"
+          >
+            {language === 'ur' ? 'بند کریں' : 'Dismiss'}
+          </button>
+        </div>
+      </Modal>
       <Modal
         open={paymentTransaction !== null}
         onClose={() => {

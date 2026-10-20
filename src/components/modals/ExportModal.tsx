@@ -1,5 +1,8 @@
 import { useState } from 'react';
 import { FileText, FileSpreadsheet, FileJson, Share2, TrendingUp, TrendingDown, Wallet, Check } from 'lucide-react';
+import { Capacitor } from '@capacitor/core';
+import { Directory, Filesystem } from '@capacitor/filesystem';
+import { Share } from '@capacitor/share';
 import { Modal } from '@/components/ui/Modal';
 import type { Language, Transaction } from '@/types';
 import { tr } from '@/lib/i18n';
@@ -31,6 +34,29 @@ function downloadBlob(content: string, filename: string, mime: string) {
   a.click();
   document.body.removeChild(a);
   setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+async function writeAndShareNativeFile(content: string, filename: string, mime: string): Promise<void> {
+  const bytes = new TextEncoder().encode(content);
+  let binary = '';
+  const chunkSize = 0x8000;
+  for (let offset = 0; offset < bytes.length; offset += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(offset, offset + chunkSize));
+  }
+  const base64Data = btoa(binary);
+  const writeResult = await Filesystem.writeFile({
+    path: filename,
+    data: base64Data,
+    directory: Directory.Cache,
+    recursive: true,
+  });
+  await Share.share({
+    title: 'Rozana Hisaab Statement',
+    text: 'Here is my exported statement from Rozana Hisaab.',
+    url: writeResult.uri,
+    dialogTitle: 'Save or Share Statement',
+    ...(mime ? { files: [writeResult.uri] } : {}),
+  });
 }
 
 function buildCSV(txns: Transaction[], lang: Language): string {
@@ -126,6 +152,8 @@ export function ExportModal({ open, onClose, language, dir, transactions }: Expo
   const [endDate, setEndDate] = useState(todayStr);
   const [format, setFormat] = useState<Format>('csv');
   const [exported, setExported] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
 
   const getFilteredTxns = (): Transaction[] => {
     if (period === 'lifetime') return transactions;
@@ -168,31 +196,60 @@ export function ExportModal({ open, onClose, language, dir, transactions }: Expo
     { key: 'pdf', label: tr('exportPdf', language), icon: FileText },
   ];
 
-  const handleGenerate = () => {
+  const handleGenerate = async () => {
+    const timestamp = Date.now();
     const stamp = new Date().toISOString().split('T')[0];
-
-    if (format === 'csv') {
-      const csv = buildCSV(filtered, language);
-      downloadBlob(csv, `rozana-hisaab-${stamp}.csv`, 'text/csv;charset=utf-8');
-    } else if (format === 'excel') {
-      const html = buildExcelHTML(filtered, language, totalIncome, totalExpenses, netBalance);
-      downloadBlob(html, `rozana-hisaab-${stamp}.xls`, 'application/vnd.ms-excel');
-    } else if (format === 'pdf') {
-      const html = buildPrintableHTML(filtered, language, totalIncome, totalExpenses, netBalance);
-      const w = window.open('', '_blank');
-      if (w) {
-        w.document.write(html);
-        w.document.close();
-      } else {
-        downloadBlob(html, `rozana-hisaab-${stamp}.html`, 'text/html');
+    setExporting(true);
+    setExportError(null);
+    try {
+      if (format === 'csv') {
+        const csv = buildCSV(filtered, language);
+        const filename = Capacitor.isNativePlatform()
+          ? `Rozana_Hisaab_Export_${timestamp}.csv`
+          : `rozana-hisaab-${stamp}.csv`;
+        if (Capacitor.isNativePlatform()) {
+          await writeAndShareNativeFile(csv, filename, 'text/csv;charset=utf-8');
+        } else {
+          downloadBlob(csv, filename, 'text/csv;charset=utf-8');
+        }
+      } else if (format === 'excel') {
+        const html = buildExcelHTML(filtered, language, totalIncome, totalExpenses, netBalance);
+        const filename = Capacitor.isNativePlatform()
+          ? `Rozana_Hisaab_Export_${timestamp}.xls`
+          : `rozana-hisaab-${stamp}.xls`;
+        if (Capacitor.isNativePlatform()) {
+          await writeAndShareNativeFile(html, filename, 'application/vnd.ms-excel');
+        } else {
+          downloadBlob(html, filename, 'application/vnd.ms-excel');
+        }
+      } else if (format === 'pdf') {
+        const html = buildPrintableHTML(filtered, language, totalIncome, totalExpenses, netBalance);
+        const w = window.open('', '_blank');
+        if (w) {
+          w.document.write(html);
+          w.document.close();
+        } else {
+          downloadBlob(html, `rozana-hisaab-${stamp}.html`, 'text/html');
+        }
       }
-    }
 
-    setExported(true);
-    setTimeout(() => {
-      setExported(false);
-      onClose();
-    }, 1500);
+      setExported(true);
+      window.setTimeout(() => {
+        setExported(false);
+        onClose();
+      }, 1500);
+    } catch (error) {
+      console.error('Could not export the statement:', error);
+      setExportError(
+        error instanceof Error
+          ? error.message
+          : language === 'ur'
+            ? 'فائل برآمد نہیں ہو سکی۔ دوبارہ کوشش کریں۔'
+            : 'Could not export the file. Please try again.',
+      );
+    } finally {
+      setExporting(false);
+    }
   };
 
   return (
@@ -320,10 +377,12 @@ export function ExportModal({ open, onClose, language, dir, transactions }: Expo
 
       <button
         onClick={handleGenerate}
-        disabled={exported || filtered.length === 0}
+        disabled={exported || exporting || filtered.length === 0}
         className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-600 text-white font-bold text-sm hover:from-emerald-400 hover:to-teal-500 transition-all active:scale-[0.98] shadow-lg shadow-emerald-500/20 flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
       >
-        {exported ? (
+        {exporting ? (
+          <span>{language === 'ur' ? 'فائل تیار ہو رہی ہے...' : 'Preparing export...'}</span>
+        ) : exported ? (
           <>
             <Check size={16} />
             {language === 'ur' ? 'برآمد ہو گیا' : 'Exported!'}
@@ -335,6 +394,11 @@ export function ExportModal({ open, onClose, language, dir, transactions }: Expo
           </>
         )}
       </button>
+      {exportError && (
+        <p role="alert" className="mt-3 text-center text-sm text-rose-300">
+          {exportError}
+        </p>
+      )}
     </Modal>
   );
 }

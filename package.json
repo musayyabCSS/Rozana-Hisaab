@@ -17,6 +17,8 @@
     "@capacitor/camera": "^8.2.6",
     "@capacitor/cli": "^8.5.3",
     "@capacitor/core": "^8.5.3",
+    "@capacitor/filesystem": "^8.1.5",
+    "@capacitor/share": "^8.0.3",
     "@supabase/supabase-js": "^2.57.4",
     "idb-keyval": "^6.3.0",
     "lucide-react": "^0.446.0",

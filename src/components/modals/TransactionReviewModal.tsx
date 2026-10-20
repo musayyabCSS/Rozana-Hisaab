@@ -5,7 +5,7 @@ import { formatPKR } from '@/lib/format';
 import { tr } from '@/lib/i18n';
 import type { Category, Language, Transaction, TransactionType } from '@/types';
 import { EXPENSE_CATEGORIES, getCategoryDetails, getCategoryLabel, INCOME_CATEGORIES } from '@/lib/categories';
-import type { PendingMedia } from '@/lib/localStore';
+import type { MediaReviewDraft } from '@/lib/mediaProcessing';
 
 function createReviewDraft(transaction: Transaction | undefined): Transaction | null {
   if (!transaction) return null;
@@ -21,23 +21,21 @@ function createReviewDraft(transaction: Transaction | undefined): Transaction | 
   return { ...transaction, category: safeCategory };
 }
 
-interface PendingMediaReviewModalProps {
-  media: PendingMedia | null;
+interface TransactionReviewModalProps {
+  media: MediaReviewDraft | null;
   language: Language;
   dir: 'ltr' | 'rtl';
-  onRetry: (id: string) => void;
   onDiscard: (id: string) => void;
-  onSave: (media: PendingMedia, transaction: Transaction) => Promise<boolean>;
+  onSave: (media: MediaReviewDraft, transaction: Transaction) => Promise<boolean>;
 }
 
-export function PendingMediaReviewModal({
+export function TransactionReviewModal({
   media,
   language,
   dir,
-  onRetry,
   onDiscard,
   onSave,
-}: PendingMediaReviewModalProps) {
+}: TransactionReviewModalProps) {
   const transaction = media?.transaction;
   const isUrdu = language === 'ur';
   const [receiptPreview, setReceiptPreview] = useState<string | null>(null);
@@ -95,35 +93,7 @@ export function PendingMediaReviewModal({
       title={tr('mediaReviewTitle', language)}
       dir={dir}
     >
-      {media?.status === 'failed' ? (
-        <div className="space-y-4">
-          <p role="alert" className="text-sm text-amber-300">
-            {media.errorKind === 'too_large'
-              ? tr(media.type === 'voice' ? 'mediaTooLargeVoice' : 'mediaTooLargeReceipt', language)
-              : media.errorKind === 'invalid'
-                ? tr('mediaInvalid', language)
-                : tr('mediaFailure', language)}
-          </p>
-          <div className="flex gap-3">
-            {media.errorKind === 'server' && (
-              <button
-                type="button"
-                onClick={() => onRetry(media.id)}
-                className="flex-1 rounded-xl bg-emerald-500 px-4 py-3 text-sm font-semibold text-slate-950"
-              >
-                {tr('mediaRetry', language)}
-              </button>
-            )}
-            <button
-              type="button"
-              onClick={() => onDiscard(media.id)}
-              className="flex-1 rounded-xl border border-slate-700 px-4 py-3 text-sm text-slate-200"
-            >
-              {tr('mediaDiscard', language)}
-            </button>
-          </div>
-        </div>
-      ) : media && draft ? (
+      {media && draft ? (
         <div className="max-h-[calc(90dvh-7rem)] overflow-y-auto px-1 py-1">
         <div className="space-y-4 pb-2">
           {media.type === 'receipt' && receiptPreview && (

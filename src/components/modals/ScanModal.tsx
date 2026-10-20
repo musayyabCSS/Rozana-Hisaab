@@ -3,7 +3,7 @@ import { AlertCircle, Camera, FileUp, Loader2, RotateCcw } from 'lucide-react';
 import { Capacitor } from '@capacitor/core';
 import { Camera as NativeCamera, CameraResultType, CameraSource } from '@capacitor/camera';
 import { Modal } from '@/components/ui/Modal';
-import type { Language } from '@/types';
+import type { Language, NewTransaction, Transaction } from '@/types';
 import { tr } from '@/lib/i18n';
 
 interface ScanModalProps {
@@ -11,7 +11,9 @@ interface ScanModalProps {
   onClose: () => void;
   language: Language;
   dir: 'ltr' | 'rtl';
-  onCaptureMedia: (blob: Blob) => Promise<boolean>;
+  onCaptureMedia: (blob: Blob) => Promise<Transaction>;
+  onReview: (transaction: Transaction, blob: Blob) => void;
+  onSwitchToManual: (prefill: Partial<NewTransaction>, receiptBlob: Blob | null) => void;
 }
 
 const MAX_IMAGE_BASE64_LENGTH = 7_000_000;
@@ -66,21 +68,32 @@ async function downscaleReceiptPhoto(source: Blob): Promise<Blob> {
   }
 }
 
-export function ScanModal({ open, onClose, language, dir, onCaptureMedia }: ScanModalProps) {
+export function ScanModal({
+  open,
+  onClose,
+  language,
+  dir,
+  onCaptureMedia,
+  onReview,
+  onSwitchToManual,
+}: ScanModalProps) {
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [cameraReady, setCameraReady] = useState(false);
   const [captureError, setCaptureError] = useState<string | null>(null);
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
   const [processing, setProcessing] = useState(false);
-  const [queuedOffline, setQueuedOffline] = useState(false);
-  const [waitingForInternet, setWaitingForInternet] = useState(false);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const openRef = useRef(open);
+  const capturedBlobRef = useRef<Blob | null>(null);
   const onCaptureMediaRef = useRef(onCaptureMedia);
+  const onReviewRef = useRef(onReview);
+  const onSwitchToManualRef = useRef(onSwitchToManual);
   openRef.current = open;
   onCaptureMediaRef.current = onCaptureMedia;
+  onReviewRef.current = onReview;
+  onSwitchToManualRef.current = onSwitchToManual;
 
   const stopCamera = useCallback(() => {
     streamRef.current?.getTracks().forEach((track) => track.stop());
@@ -136,25 +149,48 @@ export function ScanModal({ open, onClose, language, dir, onCaptureMedia }: Scan
 
   useEffect(() => () => stopCamera(), [stopCamera]);
 
+  useEffect(() => {
+    if (open) return;
+    if (capturedImage) URL.revokeObjectURL(capturedImage);
+    setCapturedImage(null);
+    capturedBlobRef.current = null;
+    setProcessing(false);
+  }, [capturedImage, open]);
+
+  const processCapturedBlob = async (blob: Blob) => {
+    setProcessing(true);
+    setCaptureError(null);
+    stopCamera();
+    try {
+      const transaction = await onCaptureMediaRef.current(blob);
+      onReviewRef.current(transaction, blob);
+    } catch (error) {
+      console.error('Could not process receipt image:', error);
+      setCaptureError(language === 'ur'
+        ? 'کنکشن ناکام ہو گیا۔ براہ کرم اپنا انٹرنیٹ کنکشن چیک کریں۔'
+        : 'Connection failed. Please check your internet connection.');
+    } finally {
+      setProcessing(false);
+    }
+  };
+
   const savePhoto = async (blob: Blob) => {
     setProcessing(true);
     setCaptureError(null);
     stopCamera();
     try {
       const compressedBlob = await downscaleReceiptPhoto(blob);
-      const processed = await onCaptureMediaRef.current(compressedBlob);
-      if (!processed) {
-        setCapturedImage(URL.createObjectURL(compressedBlob));
-        setQueuedOffline(true);
-        setWaitingForInternet(true);
-      }
-      stopCamera();
+      capturedBlobRef.current = compressedBlob;
+      setCapturedImage(URL.createObjectURL(compressedBlob));
+      await processCapturedBlob(compressedBlob);
     } catch (error) {
       console.error('Could not save receipt photo locally:', error);
       setCaptureError(
         error instanceof Error && error.message.includes('too large')
           ? tr('mediaTooLargeReceipt', language)
-          : tr('mediaLocalSaveFailed', language),
+          : language === 'ur'
+            ? 'کنکشن ناکام ہو گیا۔ براہ کرم اپنا انٹرنیٹ کنکشن چیک کریں۔'
+            : 'Connection failed. Please check your internet connection.',
       );
     } finally {
       setProcessing(false);
@@ -245,9 +281,8 @@ export function ScanModal({ open, onClose, language, dir, onCaptureMedia }: Scan
   const handleRetake = () => {
     if (capturedImage) URL.revokeObjectURL(capturedImage);
     setCapturedImage(null);
+    capturedBlobRef.current = null;
     setProcessing(false);
-    setQueuedOffline(false);
-    setWaitingForInternet(false);
     setCaptureError(null);
   };
 
@@ -255,12 +290,28 @@ export function ScanModal({ open, onClose, language, dir, onCaptureMedia }: Scan
     stopCamera();
     if (capturedImage) URL.revokeObjectURL(capturedImage);
     setCapturedImage(null);
+    capturedBlobRef.current = null;
     setCameraError(null);
     setCaptureError(null);
-    setWaitingForInternet(false);
     setProcessing(false);
-    setQueuedOffline(false);
     onClose();
+  };
+
+  const retryProcessing = () => {
+    if (capturedBlobRef.current) void processCapturedBlob(capturedBlobRef.current);
+  };
+
+  const switchToManual = () => {
+    const receiptBlob = capturedBlobRef.current;
+    handleClose();
+    onSwitchToManualRef.current({
+      type: 'expense',
+      amount: 0,
+      category: 'bills',
+      title: 'Scanned Receipt',
+      source: 'scan',
+      has_receipt: true,
+    }, receiptBlob);
   };
 
   return (
@@ -284,18 +335,6 @@ export function ScanModal({ open, onClose, language, dir, onCaptureMedia }: Scan
               {language === 'ur' ? 'AI Hisaab tayyar kar raha hai...' : 'Analyzing transaction...'}
             </p>
           </div>
-        ) : queuedOffline ? (
-          <div role="status" className="flex min-h-80 flex-col items-center justify-center text-center">
-            {capturedImage && <img src={capturedImage} alt={tr('receiptPhotoAlt', language)} className="mb-4 max-h-56 w-full rounded-xl object-contain" />}
-            <p className="text-sm font-semibold text-amber-300">
-              {language === 'ur'
-                ? 'Internet connect nahi hai. Offline save ho gaya hai.'
-                : '📶 Internet disconnected. Saved locally and will process when you reconnect.'}
-            </p>
-            <button type="button" onClick={handleClose} className="mt-5 rounded-xl border border-slate-700 px-5 py-2.5 text-sm text-slate-200">
-              {language === 'ur' ? 'بند کریں' : 'Close'}
-            </button>
-          </div>
         ) : (
         <>
         {cameraError && (
@@ -318,13 +357,19 @@ export function ScanModal({ open, onClose, language, dir, onCaptureMedia }: Scan
           )}
         </div>
 
-        {waitingForInternet && (
-          <p role="status" className="mx-auto w-fit rounded-full border border-amber-500/30 bg-amber-500/10 px-3 py-1.5 text-xs text-amber-300">
-            {tr('waitingForInternet', language)}
-          </p>
-        )}
-
-        {capturedImage ? (
+        {captureError && capturedBlobRef.current ? (
+          <div className="flex flex-col gap-3">
+            {capturedImage && <img src={capturedImage} alt={tr('receiptPhotoAlt', language)} className="max-h-48 w-full rounded-xl object-contain" />}
+            <div className="flex gap-2">
+              <button type="button" onClick={retryProcessing} className="flex-1 rounded-xl bg-emerald-500 px-3 py-2.5 text-sm font-semibold text-slate-950">
+                🔄 {language === 'ur' ? 'دوبارہ کوشش کریں' : 'Retry'}
+              </button>
+              <button type="button" onClick={switchToManual} className="flex-1 rounded-xl border border-slate-700 px-3 py-2.5 text-sm text-slate-200">
+                ✏️ {language === 'ur' ? 'دستی اندراج' : 'Switch to Manual Add'}
+              </button>
+            </div>
+          </div>
+        ) : capturedImage ? (
           <button
             type="button"
             onClick={handleRetake}
