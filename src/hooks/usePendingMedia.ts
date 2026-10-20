@@ -275,7 +275,7 @@ export function usePendingMedia(userId?: string) {
   const queueMedia = useCallback(async (
     type: PendingMedia['type'],
     blob: Blob,
-  ): Promise<PendingMedia> => {
+  ): Promise<boolean> => {
     if (!userId) throw new Error('Sign in before saving media to this device.');
     const item: PendingMedia = {
       id: createId(),
@@ -287,10 +287,38 @@ export function usePendingMedia(userId?: string) {
       attempts: 0,
       userId,
     };
-    await updateMedia(item);
-    if (navigator.onLine) void processPending();
-    return item;
-  }, [processPending, updateMedia, userId]);
+    if (!navigator.onLine) {
+      await updateMedia(item);
+      return false;
+    }
+
+    try {
+      const transaction = await processMedia(item);
+      await updateMedia({
+        ...item,
+        status: 'done',
+        transaction,
+      });
+      return true;
+    } catch (error) {
+      const aiError = error instanceof AiRequestError ? error : null;
+      const kind = aiError?.kind ?? 'server';
+      const failed = kind === 'too_large' || kind === 'invalid';
+      const message = aiError?.message ?? (error instanceof Error ? error.message : String(error));
+      await updateMedia({
+        ...item,
+        status: failed ? 'failed' : 'pending_ai',
+        attempts: kind === 'server' ? 1 : 0,
+        error: kind === 'limit' || kind === 'auth' ? undefined : message,
+        errorKind: kind,
+        nextRetryAt: kind === 'limit'
+          ? new Date(Date.now() + 30 * 60 * 1000).toISOString()
+          : undefined,
+      });
+      if (kind === 'auth') authPausedRef.current = true;
+      throw error;
+    }
+  }, [updateMedia, userId]);
 
   const retryMedia = useCallback(async (id: string) => {
     const item = (await getPendingMediaForUser(userId ?? '')).find((media) => media.id === id);

@@ -9,7 +9,7 @@ interface VoiceModalProps {
   onClose: () => void;
   language: Language;
   dir: 'ltr' | 'rtl';
-  onCaptureMedia: (blob: Blob) => Promise<void>;
+  onCaptureMedia: (blob: Blob) => Promise<boolean>;
 }
 
 function formatTimer(seconds: number): string {
@@ -19,7 +19,15 @@ function formatTimer(seconds: number): string {
 }
 
 function pickMimeType(): string {
-  const candidates = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/aac', 'audio/wav'];
+  const candidates = [
+    'audio/webm;codecs=opus',
+    'audio/ogg;codecs=opus',
+    'audio/webm',
+    'audio/mp4',
+    'audio/mpeg',
+    'audio/aac',
+    'audio/wav',
+  ];
   for (const type of candidates) {
     if (typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported(type)) return type;
   }
@@ -30,7 +38,8 @@ const MAX_RECORDING_SECONDS = 60;
 
 export function VoiceModal({ open, onClose, language, dir, onCaptureMedia }: VoiceModalProps) {
   const [recording, setRecording] = useState(false);
-  const [saving, setSaving] = useState(false);
+  const [processing, setProcessing] = useState(false);
+  const [queuedOffline, setQueuedOffline] = useState(false);
   const [recordSeconds, setRecordSeconds] = useState(0);
   const [waitingForInternet, setWaitingForInternet] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -84,16 +93,18 @@ export function VoiceModal({ open, onClose, language, dir, onCaptureMedia }: Voi
           type: recorder.mimeType || mimeType || 'audio/webm',
         });
         chunksRef.current = [];
-        setSaving(true);
-        void onCaptureMediaRef.current(blob).then(() => {
-          setWaitingForInternet(!navigator.onLine);
+        void onCaptureMediaRef.current(blob).then((processed) => {
+          if (!processed) {
+            setQueuedOffline(true);
+            setWaitingForInternet(true);
+          }
         }).catch((saveError: unknown) => {
           console.error('Could not save voice recording locally:', saveError);
           setError(language === 'ur'
-            ? 'آواز کی ریکارڈنگ اس ڈیوائس پر محفوظ نہیں ہو سکی۔'
-            : 'Could not save the voice recording on this device.');
+            ? 'لین دین کا تجزیہ نہیں ہو سکا۔ دوبارہ کوشش کریں۔'
+            : 'Could not analyze the transaction. Please try again.');
         }).finally(() => {
-          setSaving(false);
+          setProcessing(false);
           setRecording(false);
           releaseMicrophone();
         });
@@ -141,7 +152,7 @@ export function VoiceModal({ open, onClose, language, dir, onCaptureMedia }: Voi
     chunksRef.current = [];
     releaseMicrophone();
     setRecording(false);
-    setSaving(false);
+    setProcessing(false);
   }, [clearTimer, open, releaseMicrophone]);
 
   useEffect(() => () => {
@@ -157,11 +168,10 @@ export function VoiceModal({ open, onClose, language, dir, onCaptureMedia }: Voi
   const handleStop = () => {
     clearTimer();
     setRecording(false);
-    setSaving(true);
     if (recorderRef.current?.state === 'recording') {
+      setProcessing(true);
       recorderRef.current.stop();
     } else {
-      setSaving(false);
       requestIdRef.current += 1;
     }
     releaseMicrophone();
@@ -179,7 +189,8 @@ export function VoiceModal({ open, onClose, language, dir, onCaptureMedia }: Voi
     chunksRef.current = [];
     releaseMicrophone();
     setRecording(false);
-    setSaving(false);
+    setProcessing(false);
+    setQueuedOffline(false);
     setWaitingForInternet(false);
     setError(null);
     onClose();
@@ -192,12 +203,34 @@ export function VoiceModal({ open, onClose, language, dir, onCaptureMedia }: Voi
       title={tr('voiceTitle', language)}
       subtitle={tr('voiceExample', language)}
       dir={dir}
+      closeDisabled={processing}
     >
       <div className="flex flex-col items-center py-6">
+        {processing ? (
+          <div role="status" aria-live="polite" className="flex min-h-56 flex-col items-center justify-center">
+            <div className="relative flex h-24 w-24 items-center justify-center">
+              <span className="absolute inset-0 animate-ping rounded-full bg-emerald-400/10" />
+              <span className="absolute inset-1 rounded-full border-2 border-teal-400/20 border-t-emerald-400 animate-spin" />
+              <Loader2 size={34} className="animate-spin text-emerald-300" />
+            </div>
+            <p className="mt-5 animate-pulse text-center text-sm font-semibold text-emerald-200">
+              {language === 'ur' ? 'AI Hisaab tayyar kar raha hai...' : 'Analyzing transaction...'}
+            </p>
+          </div>
+        ) : queuedOffline ? (
+          <div role="status" className="flex min-h-56 flex-col items-center justify-center text-center">
+            <p className="text-sm font-semibold text-amber-300">
+              {language === 'ur' ? 'ریکارڈنگ محفوظ ہے، انٹرنیٹ پر تجزیہ ہوگا۔' : 'Recording saved. It will be analyzed when you are online.'}
+            </p>
+            <button type="button" onClick={handleClose} className="mt-5 rounded-xl border border-slate-700 px-5 py-2.5 text-sm text-slate-200">
+              {language === 'ur' ? 'بند کریں' : 'Close'}
+            </button>
+          </div>
+        ) : (
+        <>
         <button
           type="button"
           onClick={recording ? handleStop : () => void startRecordingRef.current()}
-          disabled={saving}
           aria-label={recording ? (language === 'ur' ? 'ریکارڈنگ روکیں' : 'Stop recording') : (language === 'ur' ? 'ریکارڈنگ شروع کریں' : 'Start recording')}
           className={`relative flex h-20 w-20 items-center justify-center rounded-full transition-all disabled:opacity-50 ${
             recording ? 'scale-110 bg-rose-500/20' : 'bg-slate-800 hover:bg-slate-700'
@@ -206,9 +239,7 @@ export function VoiceModal({ open, onClose, language, dir, onCaptureMedia }: Voi
           {recording && <span className="absolute inset-0 animate-ping rounded-full bg-rose-500/20" />}
           {recording
             ? <Square size={28} className="relative z-10 text-rose-400" fill="currentColor" />
-            : saving
-              ? <Loader2 size={28} className="animate-spin text-emerald-400" />
-              : <Mic size={32} className="text-slate-300" />}
+            : <Mic size={32} className="text-slate-300" />}
         </button>
 
         {recording && (
@@ -231,11 +262,6 @@ export function VoiceModal({ open, onClose, language, dir, onCaptureMedia }: Voi
           </>
         )}
 
-        {saving && (
-          <p className="mt-4 text-sm text-slate-300">
-            {language === 'ur' ? 'ریکارڈنگ اس ڈیوائس پر محفوظ ہو رہی ہے...' : 'Saving recording on this device...'}
-          </p>
-        )}
         {waitingForInternet && (
           <p role="status" className="mt-4 rounded-full border border-amber-500/30 bg-amber-500/10 px-3 py-1.5 text-xs text-amber-300">
             {tr('waitingForInternet', language)}
@@ -246,6 +272,8 @@ export function VoiceModal({ open, onClose, language, dir, onCaptureMedia }: Voi
             <AlertCircle size={14} className="shrink-0" />
             {error}
           </p>
+        )}
+        </>
         )}
       </div>
     </Modal>

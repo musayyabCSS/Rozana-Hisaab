@@ -1,4 +1,4 @@
-import { Briefcase, Droplets, FileText, GraduationCap, HandCoins, Home, Laptop, Percent, Receipt, School, ShoppingCart, Stethoscope, Wallet, Wrench, Zap } from 'lucide-react';
+import { Briefcase, Car, Droplets, FileText, GraduationCap, HandCoins, Home, Laptop, Percent, Receipt, School, ShoppingCart, Stethoscope, Wallet, Wrench, Zap } from 'lucide-react';
 import type { Category, Language } from '@/types';
 
 interface CategoryMeta {
@@ -15,6 +15,7 @@ export const CATEGORIES: Record<Category, CategoryMeta> = {
   commission: { icon: Percent, emoji: '％', label: { en: 'Commission', ur: 'کمیشن' } },
   loan: { icon: HandCoins, emoji: '🤝', label: { en: 'Loan', ur: 'قرض' } },
   scholarship: { icon: GraduationCap, emoji: '🎓', label: { en: 'Scholarship', ur: 'وظیفہ' } },
+  transport: { icon: Car, emoji: '🚗', label: { en: 'Transport', ur: 'ٹرانسپورٹ' } },
   fuel: { icon: Droplets, emoji: '⛽', label: { en: 'Fuel / Petrol', ur: 'پیٹرول' } },
   bills: { icon: Zap, emoji: '⚡', label: { en: 'Bills / Utilities', ur: 'بلز / یوٹیلیٹیز' } },
   groceries: { icon: ShoppingCart, emoji: '🛒', label: { en: 'Grocery', ur: 'راشن' } },
@@ -26,7 +27,7 @@ export const CATEGORIES: Record<Category, CategoryMeta> = {
   misc_expense: { icon: FileText, emoji: '🧾', label: { en: 'Misc. Expense', ur: 'متفرق خرچ' } },
 };
 
-export const EXPENSE_CATEGORIES: Category[] = ['fuel', 'bills', 'groceries', 'medical', 'udhaar', 'rent', 'school_fee', 'mechanic', 'misc_expense'];
+export const EXPENSE_CATEGORIES: Category[] = ['transport', 'fuel', 'bills', 'groceries', 'medical', 'udhaar', 'rent', 'school_fee', 'mechanic', 'misc_expense'];
 export const INCOME_CATEGORIES: Category[] = ['salary', 'business', 'freelance', 'rental_income', 'commission', 'loan', 'scholarship'];
 
 export function getCategoryLabel(cat: Category, lang: Language): string {

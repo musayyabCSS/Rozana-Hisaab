@@ -11,7 +11,7 @@ interface ScanModalProps {
   onClose: () => void;
   language: Language;
   dir: 'ltr' | 'rtl';
-  onCaptureMedia: (blob: Blob) => Promise<void>;
+  onCaptureMedia: (blob: Blob) => Promise<boolean>;
 }
 
 const MAX_IMAGE_BASE64_LENGTH = 7_000_000;
@@ -65,7 +65,8 @@ export function ScanModal({ open, onClose, language, dir, onCaptureMedia }: Scan
   const [cameraReady, setCameraReady] = useState(false);
   const [captureError, setCaptureError] = useState<string | null>(null);
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
+  const [processing, setProcessing] = useState(false);
+  const [queuedOffline, setQueuedOffline] = useState(false);
   const [waitingForInternet, setWaitingForInternet] = useState(false);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -130,13 +131,16 @@ export function ScanModal({ open, onClose, language, dir, onCaptureMedia }: Scan
   useEffect(() => () => stopCamera(), [stopCamera]);
 
   const savePhoto = async (blob: Blob) => {
-    setSaving(true);
+    setProcessing(true);
     setCaptureError(null);
     try {
       const compressedBlob = await downscaleReceiptPhoto(blob);
-      await onCaptureMediaRef.current(compressedBlob);
-      setCapturedImage(URL.createObjectURL(compressedBlob));
-      setWaitingForInternet(!navigator.onLine);
+      const processed = await onCaptureMediaRef.current(compressedBlob);
+      if (!processed) {
+        setCapturedImage(URL.createObjectURL(compressedBlob));
+        setQueuedOffline(true);
+        setWaitingForInternet(true);
+      }
       stopCamera();
     } catch (error) {
       console.error('Could not save receipt photo locally:', error);
@@ -146,28 +150,35 @@ export function ScanModal({ open, onClose, language, dir, onCaptureMedia }: Scan
           : tr('mediaLocalSaveFailed', language),
       );
     } finally {
-      setSaving(false);
+      setProcessing(false);
     }
   };
 
   const capturePhoto = () => {
     if (Capacitor.isNativePlatform()) {
+      setProcessing(true);
+      stopCamera();
       void chooseNativePhoto(CameraSource.Camera);
       return;
     }
     const video = videoRef.current;
     if (!video) return;
+    setProcessing(true);
     const canvas = document.createElement('canvas');
     canvas.width = video.videoWidth || 640;
     canvas.height = video.videoHeight || 480;
     const context = canvas.getContext('2d');
     if (!context) {
+      stopCamera();
+      setProcessing(false);
       setCaptureError(tr('cameraCaptureFailed', language));
       return;
     }
     context.drawImage(video, 0, 0, canvas.width, canvas.height);
+    stopCamera();
     canvas.toBlob((blob) => {
       if (!blob) {
+        setProcessing(false);
         setCaptureError(tr('cameraCaptureFailed', language));
         return;
       }
@@ -177,6 +188,8 @@ export function ScanModal({ open, onClose, language, dir, onCaptureMedia }: Scan
 
   const chooseNativePhoto = async (source: CameraSource) => {
     try {
+      setProcessing(true);
+      setCaptureError(null);
       const photo = await NativeCamera.getPhoto({
         quality: 88,
         allowEditing: false,
@@ -198,11 +211,14 @@ export function ScanModal({ open, onClose, language, dir, onCaptureMedia }: Scan
             ? tr('cameraPermissionRequired', language)
             : tr('cameraStartFailed', language),
       );
+      setProcessing(false);
     }
   };
 
   const choosePhoto = () => {
     if (Capacitor.isNativePlatform()) {
+      setProcessing(true);
+      stopCamera();
       void chooseNativePhoto(CameraSource.Photos);
     } else {
       fileInputRef.current?.click();
@@ -213,12 +229,15 @@ export function ScanModal({ open, onClose, language, dir, onCaptureMedia }: Scan
     const file = event.target.files?.[0];
     event.target.value = '';
     if (!file) return;
+    stopCamera();
     void savePhoto(file);
   };
 
   const handleRetake = () => {
     if (capturedImage) URL.revokeObjectURL(capturedImage);
     setCapturedImage(null);
+    setProcessing(false);
+    setQueuedOffline(false);
     setWaitingForInternet(false);
     setCaptureError(null);
   };
@@ -230,7 +249,8 @@ export function ScanModal({ open, onClose, language, dir, onCaptureMedia }: Scan
     setCameraError(null);
     setCaptureError(null);
     setWaitingForInternet(false);
-    setSaving(false);
+    setProcessing(false);
+    setQueuedOffline(false);
     onClose();
   };
 
@@ -241,8 +261,32 @@ export function ScanModal({ open, onClose, language, dir, onCaptureMedia }: Scan
       title={tr('scanTitle', language)}
       subtitle={tr('scanSubtitle', language)}
       dir={dir}
+      closeDisabled={processing}
     >
       <div className="space-y-4">
+        {processing ? (
+          <div role="status" aria-live="polite" className="flex min-h-80 flex-col items-center justify-center rounded-xl bg-slate-950/70">
+            <div className="relative flex h-24 w-24 items-center justify-center">
+              <span className="absolute inset-0 animate-ping rounded-full bg-emerald-400/10" />
+              <span className="absolute inset-1 animate-spin rounded-full border-2 border-teal-400/20 border-t-emerald-400" />
+              <Loader2 size={34} className="animate-spin text-emerald-300" />
+            </div>
+            <p className="mt-5 animate-pulse text-center text-sm font-semibold text-emerald-200">
+              {language === 'ur' ? 'AI Hisaab tayyar kar raha hai...' : 'Analyzing transaction...'}
+            </p>
+          </div>
+        ) : queuedOffline ? (
+          <div role="status" className="flex min-h-80 flex-col items-center justify-center text-center">
+            {capturedImage && <img src={capturedImage} alt={tr('receiptPhotoAlt', language)} className="mb-4 max-h-56 w-full rounded-xl object-contain" />}
+            <p className="text-sm font-semibold text-amber-300">
+              {language === 'ur' ? 'رسید محفوظ ہے، انٹرنیٹ پر تجزیہ ہوگا۔' : 'Receipt saved. It will be analyzed when you are online.'}
+            </p>
+            <button type="button" onClick={handleClose} className="mt-5 rounded-xl border border-slate-700 px-5 py-2.5 text-sm text-slate-200">
+              {language === 'ur' ? 'بند کریں' : 'Close'}
+            </button>
+          </div>
+        ) : (
+        <>
         {cameraError && (
           <div role="alert" className="flex items-start gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-300">
             <AlertCircle size={15} className="mt-0.5 shrink-0" />
@@ -260,12 +304,6 @@ export function ScanModal({ open, onClose, language, dir, onCaptureMedia }: Scan
             <span className="px-6 text-center text-sm text-slate-400">{tr('cameraPlaceholder', language)}</span>
           ) : (
             <video ref={videoRef} autoPlay playsInline muted className="h-full w-full object-cover" />
-          )}
-          {saving && (
-            <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-slate-950/80">
-              <Loader2 className="animate-spin text-emerald-400" />
-              <span className="text-xs text-slate-200">{tr('savingMediaLocally', language)}</span>
-            </div>
           )}
         </div>
 
@@ -289,7 +327,7 @@ export function ScanModal({ open, onClose, language, dir, onCaptureMedia }: Scan
             <button
               type="button"
               onClick={capturePhoto}
-              disabled={saving || !cameraReady}
+              disabled={!cameraReady}
               className="flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-500 py-3 text-sm font-bold text-slate-950 disabled:opacity-50"
             >
               <Camera size={17} />
@@ -298,7 +336,6 @@ export function ScanModal({ open, onClose, language, dir, onCaptureMedia }: Scan
             <button
               type="button"
               onClick={choosePhoto}
-              disabled={saving}
               className="flex w-full items-center justify-center gap-2 rounded-xl border border-slate-700 bg-slate-800 py-2.5 text-xs font-medium text-slate-200"
             >
               <FileUp size={16} />
@@ -320,6 +357,8 @@ export function ScanModal({ open, onClose, language, dir, onCaptureMedia }: Scan
           onChange={handleFileSelect}
           className="hidden"
         />
+        </>
+        )}
       </div>
     </Modal>
   );

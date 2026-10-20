@@ -48,6 +48,9 @@ async function getHttpErrorMessage(error: FunctionsHttpError): Promise<string> {
 }
 
 async function invokeOnce<T>(request: AiProxyRequest): Promise<AiResult<T>> {
+  if (typeof navigator !== 'undefined' && !navigator.onLine) {
+    return { ok: false, kind: 'network', message: 'Device is offline.' };
+  }
   try {
     const { data, error } = await supabase.functions.invoke<T>('ai-proxy', {
       body: request,

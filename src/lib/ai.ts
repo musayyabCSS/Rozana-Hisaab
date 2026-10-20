@@ -45,17 +45,27 @@ function requireAiData<T>(
   return result.data;
 }
 
+function bytesToBase64(bytes: Uint8Array): string {
+  const chunks: string[] = [];
+  const chunkSize = 0x8000;
+  for (let offset = 0; offset < bytes.length; offset += chunkSize) {
+    const chunk = bytes.subarray(offset, Math.min(offset + chunkSize, bytes.length));
+    let binary = '';
+    for (let index = 0; index < chunk.length; index += 1) {
+      binary += String.fromCharCode(chunk[index]);
+    }
+    chunks.push(binary);
+  }
+  return btoa(chunks.join(''));
+}
+
 // 1. Audio Transcription using Whisper via Supabase Edge Function
 export async function transcribeAudioWithWhisper(
   audioBlob: Blob,
 ): Promise<string> {
   const buffer = await audioBlob.arrayBuffer();
   const bytes = new Uint8Array(buffer);
-  let binary = '';
-  for (let i = 0; i < bytes.byteLength; i++) {
-    binary += String.fromCharCode(bytes[i]);
-  }
-  const audioBase64 = btoa(binary);
+  const audioBase64 = bytesToBase64(bytes);
 
   const data = requireAiData(await invokeAiProxy<{ text: string }>({
     action: 'transcribe',

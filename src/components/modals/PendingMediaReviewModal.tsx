@@ -30,11 +30,13 @@ export function PendingMediaReviewModal({
   const [draft, setDraft] = useState<Transaction | null>(transaction ?? null);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [categoryPickerOpen, setCategoryPickerOpen] = useState(false);
 
   useEffect(() => {
     setDraft(transaction ?? null);
     setSaving(false);
     setSaveError(null);
+    setCategoryPickerOpen(false);
   }, [media?.id, transaction]);
 
   useEffect(() => {
@@ -167,19 +169,46 @@ export function PendingMediaReviewModal({
               />
             </div>
             <div>
-              <label htmlFor="review-transaction-category" className="mb-1.5 block text-xs text-slate-400">{tr('category', language)}</label>
-              <select
-                id="review-transaction-category"
-                value={draft.category}
-                onChange={(event) => setDraft({ ...draft, category: event.target.value as Category })}
-                className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm text-slate-100 focus:border-emerald-500 focus:outline-none"
+              <span className="mb-1.5 block text-xs text-slate-400">{tr('category', language)}</span>
+              <button
+                type="button"
+                aria-expanded={categoryPickerOpen}
+                aria-controls="review-transaction-category-options"
+                onClick={() => setCategoryPickerOpen((open) => !open)}
+                className="flex w-full items-center justify-between rounded-xl border border-slate-700 bg-[#131B2E] px-3 py-3 text-left text-sm text-slate-100"
               >
-                {categories.map((category) => (
-                  <option key={category} value={category}>
-                    {CATEGORIES[category].emoji} {getCategoryLabel(category, language)}
-                  </option>
-                ))}
-              </select>
+                <span>{CATEGORIES[draft.category].emoji} {getCategoryLabel(draft.category, language)}</span>
+                <span className="text-emerald-400">{categoryPickerOpen ? '−' : '+'}</span>
+              </button>
+              {categoryPickerOpen && (
+                <div
+                  id="review-transaction-category-options"
+                  className="mt-2 grid max-h-48 grid-cols-2 gap-2 overflow-y-auto rounded-xl border border-slate-700 bg-[#131B2E] p-2"
+                >
+                  {categories.map((category: Category) => {
+                    const selected = category === draft.category;
+                    return (
+                      <button
+                        key={category}
+                        type="button"
+                        aria-pressed={selected}
+                        onClick={() => {
+                          setDraft({ ...draft, category });
+                          setCategoryPickerOpen(false);
+                        }}
+                        className={`rounded-lg border px-2.5 py-2.5 text-left text-xs font-medium transition-colors ${
+                          selected
+                            ? 'border-emerald-400/50 bg-emerald-400/15 text-emerald-200'
+                            : 'border-transparent bg-slate-900/60 text-slate-300 hover:border-slate-600'
+                        }`}
+                      >
+                        <span className="me-1.5">{CATEGORIES[category].emoji}</span>
+                        {getCategoryLabel(category, language)}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
             </div>
             <div>
               <label htmlFor="review-transaction-date" className="mb-1.5 block text-xs text-slate-400">{isUrdu ? 'تاریخ' : 'Date'}</label>

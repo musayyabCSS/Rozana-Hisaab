@@ -85,7 +85,7 @@ Calculate relative dates based on Today's Date:
 - Always output date as YYYY-MM-DD.
 Understand Pakistani vernacular and mixed terminology:
 - LESCO/K-Electric/SNGPL indicate utility bills; use category "bills" (the app's Utilities-equivalent category).
-- Careem/Bykea/Fuel/Petrol/Shell indicate transport or fuel; use the closest supported category "fuel".
+- Careem/Bykea, taxi, bus, or train fares indicate category "transport". Fuel/Petrol/Shell indicate category "fuel".
 - Dukaan/Sauda/Sabzi/Kirana indicate groceries; use category "groceries".
 - Preserve person/merchant names such as Adil/Kashif/Ali/Ahmed in the transaction title.
 Correctly interpret phonetically written English words in Urdu script (e.g., "ڈالری" or "سیلری" means Salary, "ریسیود" means Received, "بل" means Bill).
@@ -93,7 +93,7 @@ For example, classify "Electricity bill 25000" as category "bills", title "Elect
 Return strictly valid JSON with this exact schema:
 {
   "amount": number,
-  "category": "salary" | "business" | "freelance" | "rental_income" | "commission" | "loan" | "scholarship" | "fuel" | "bills" | "groceries" | "medical" | "udhaar" | "rent" | "school_fee" | "mechanic" | "misc_expense",
+  "category": "salary" | "business" | "freelance" | "rental_income" | "commission" | "loan" | "scholarship" | "transport" | "fuel" | "bills" | "groceries" | "medical" | "udhaar" | "rent" | "school_fee" | "mechanic" | "misc_expense",
   "title": string,
   "type": "income" | "expense",
   "paymentMethod": "cash" | "bank_transfer" | "easypaisa" | "jazzcash" | "card" | null,
@@ -139,7 +139,7 @@ Return strictly valid JSON with this exact schema:
 - title: for an incoming payment from an individual/client, use the person's/client's name (not generic text such as "Payment Received"). For a utility bill, use the provider name (such as LESCO or PTCL). Otherwise use a concise transaction title.
 - amount: numeric amount in PKR, or 0 if not found
 - type: use "income" when money is received, deposited, or paid to a person/client; otherwise "expense"
-- category: for vehicle maintenance, car repair, parts, labour, periodic maintenance, workshop, or mechanic invoices, strictly use "mechanic". For incoming client payments use "freelance". For other transactions, choose exactly one of "salary", "business", "rental_income", "commission", "loan", "scholarship", "fuel", "bills", "groceries", "medical", "udhaar", "rent", "school_fee", or "misc_expense".
+- category: for vehicle maintenance, car repair, parts, labour, periodic maintenance, workshop, or mechanic invoices, strictly use "mechanic". For taxi, bus, or train fares, use "transport". For incoming client payments use "freelance". For other transactions, choose exactly one of "salary", "business", "rental_income", "commission", "loan", "scholarship", "transport", "fuel", "bills", "groceries", "medical", "udhaar", "rent", "school_fee", or "misc_expense".
 - vendor: for incoming payments, extract the client's/person's name (not generic labels); for expenses, extract the merchant name; or empty string if not visible
 - provider: service/provider name, or empty string
 - transaction_date: the printed or stamped invoice/receipt date in YYYY-MM-DD format (for example, "2026-08-09"). Never omit this if a date appears on the paper. Convert dates such as "09-AUG-2026" to "2026-08-09".

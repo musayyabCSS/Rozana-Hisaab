@@ -8,6 +8,7 @@ export type Category =
   | 'commission'
   | 'loan'
   | 'scholarship'
+  | 'transport'
   | 'fuel'
   | 'bills'
   | 'groceries'

@@ -31,6 +31,7 @@ const CATEGORY_RULES: { keywords: string[]; category: Category }[] = [
   { keywords: ['commission'], category: 'commission' },
   { keywords: ['school fee', 'school fees'], category: 'school_fee' },
   { keywords: ['mechanic', 'car repair'], category: 'mechanic' },
+  { keywords: ['transport', 'taxi', 'ride', 'careem', 'bykea', 'bus', 'train'], category: 'transport' },
   { keywords: ['rent', 'house rent'], category: 'rent' },
   { keywords: ['loan repayment', 'loan payment'], category: 'udhaar' },
   { keywords: ['misc', 'other expense'], category: 'misc_expense' },

@@ -8,9 +8,18 @@ interface ModalProps {
   subtitle?: string;
   children: ReactNode;
   dir?: 'ltr' | 'rtl';
+  closeDisabled?: boolean;
 }
 
-export function Modal({ open, onClose, title, subtitle, children, dir = 'ltr' }: ModalProps) {
+export function Modal({
+  open,
+  onClose,
+  title,
+  subtitle,
+  children,
+  dir = 'ltr',
+  closeDisabled = false,
+}: ModalProps) {
   useEffect(() => {
     if (open) {
       document.body.style.overflow = 'hidden';
@@ -32,7 +41,7 @@ export function Modal({ open, onClose, title, subtitle, children, dir = 'ltr' }:
     >
       <div
         className="absolute inset-0 bg-black/60 backdrop-blur-sm animate-[fadeIn_0.2s_ease-out]"
-        onClick={onClose}
+        onClick={closeDisabled ? undefined : onClose}
       />
       <div
         dir={dir}
@@ -45,6 +54,7 @@ export function Modal({ open, onClose, title, subtitle, children, dir = 'ltr' }:
           </div>
           <button
             onClick={onClose}
+            disabled={closeDisabled}
             className="shrink-0 p-2 -mt-1 -me-2 rounded-full hover:bg-slate-800 transition-colors text-slate-400 hover:text-slate-100"
             aria-label="Close"
           >

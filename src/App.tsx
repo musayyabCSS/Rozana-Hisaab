@@ -628,7 +628,9 @@ function App() {
         language={language}
         dir={dir}
         onCaptureMedia={async (blob) => {
-          await queueMedia('voice', blob);
+          const processed = await queueMedia('voice', blob);
+          if (processed) setActiveModal(null);
+          return processed;
         }}
       />
 
@@ -638,7 +640,9 @@ function App() {
         language={language}
         dir={dir}
         onCaptureMedia={async (blob) => {
-          await queueMedia('receipt', blob);
+          const processed = await queueMedia('receipt', blob);
+          if (processed) setActiveModal(null);
+          return processed;
         }}
       />
 
