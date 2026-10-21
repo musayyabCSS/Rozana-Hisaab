@@ -103,43 +103,73 @@ function buildExcelHTML(txns: Transaction[], lang: Language, income: number, exp
 }
 
 function buildPrintableHTML(txns: Transaction[], lang: Language, income: number, expenses: number, net: number): string {
+  const isUrdu = lang === 'ur';
   const rows = txns
     .map(
       (t) => `<tr>
-        <td style="padding:6px 12px;border-bottom:1px solid #eee">${t.transaction_date}</td>
-        <td style="padding:6px 12px;border-bottom:1px solid #eee">${t.type}</td>
-        <td style="padding:6px 12px;border-bottom:1px solid #eee">${getCategoryLabel(t.category, lang)}</td>
-        <td style="padding:6px 12px;border-bottom:1px solid #eee">${t.title.replace(/</g, '&lt;')}</td>
-        <td style="padding:6px 12px;border-bottom:1px solid #eee;text-align:right">${formatPKR(Number(t.amount))}</td>
+        <td style="padding:8px 12px;border-bottom:1px solid #eee">${t.transaction_date}</td>
+        <td style="padding:8px 12px;border-bottom:1px solid #eee">${t.type}</td>
+        <td style="padding:8px 12px;border-bottom:1px solid #eee">${getCategoryLabel(t.category, lang)}</td>
+        <td style="padding:8px 12px;border-bottom:1px solid #eee">${t.title.replace(/</g, '&lt;')}</td>
+        <td style="padding:8px 12px;border-bottom:1px solid #eee;text-align:right;font-weight:600">${formatPKR(Number(t.amount))}</td>
       </tr>`,
     )
     .join('');
-  return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Rozana Hisaab Report</title>
-<style>
-  body { font-family: -apple-system, system-ui, sans-serif; color: #1e293b; padding: 32px; max-width: 800px; margin: 0 auto; }
-  h1 { font-size: 22px; margin-bottom: 4px; }
-  .subtitle { color: #64748b; font-size: 13px; margin-bottom: 24px; }
-  .summary { display: flex; gap: 24px; margin-bottom: 24px; }
-  .summary div { flex: 1; padding: 16px; border-radius: 12px; background: #f8fafc; }
-  .summary .label { font-size: 11px; color: #64748b; text-transform: uppercase; margin-bottom: 4px; }
-  .summary .value { font-size: 18px; font-weight: 700; }
-  .income .value { color: #059669; } .expense .value { color: #e11d48; } .net .value { color: ${net >= 0 ? '#059669' : '#e11d48'}; }
-  table { width: 100%; border-collapse: collapse; font-size: 13px; }
-  th { text-align: left; padding: 8px 12px; background: #f1f5f9; font-weight: 600; }
-  .footer { margin-top: 24px; font-size: 11px; color: #94a3b8; }
-  @media print { body { padding: 0; } }
-</style></head><body>
+
+  return `<!DOCTYPE html>
+<html lang="${isUrdu ? 'ur' : 'en'}" dir="${isUrdu ? 'rtl' : 'ltr'}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Rozana Hisaab Report</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; color: #1e293b; padding: 24px; max-width: 800px; margin: 0 auto; background: #fff; }
+    h1 { font-size: 24px; margin: 0 0 4px 0; color: #0f172a; }
+    .subtitle { color: #64748b; font-size: 13px; margin: 0 0 20px 0; }
+    .summary { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 24px; }
+    .summary div { padding: 14px; border-radius: 12px; background: #f8fafc; border: 1px solid #e2e8f0; }
+    .summary .label { font-size: 11px; color: #64748b; text-transform: uppercase; margin-bottom: 4px; font-weight: 600; }
+    .summary .value { font-size: 18px; font-weight: 700; }
+    .income .value { color: #059669; }
+    .expense .value { color: #e11d48; }
+    .net .value { color: ${net >= 0 ? '#059669' : '#e11d48'}; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 8px; }
+    th { text-align: ${isUrdu ? 'right' : 'left'}; padding: 10px 12px; background: #f1f5f9; font-weight: 600; color: #475569; }
+    .footer { margin-top: 24px; font-size: 11px; color: #94a3b8; text-align: center; }
+    .print-bar { margin-bottom: 20px; display: flex; justify-content: flex-end; }
+    .print-btn { background: #059669; color: white; border: none; padding: 8px 16px; border-radius: 8px; font-weight: 600; cursor: pointer; }
+    @media print {
+      body { padding: 0; }
+      .no-print { display: none !important; }
+    }
+  </style>
+</head>
+<body>
+  <div class="print-bar no-print">
+    <button class="print-btn" onclick="window.print()">🖨️ Print / Save as PDF</button>
+  </div>
   <h1>Rozana Hisaab</h1>
-  <p class="subtitle>Transaction Report - Generated ${new Date().toLocaleDateString('en-PK')}</p>
+  <p class="subtitle">Transaction Report &bull; Generated ${new Date().toLocaleDateString('en-PK')}</p>
   <div class="summary">
     <div class="income"><div class="label">Total Income</div><div class="value">PKR ${formatPKR(income)}</div></div>
     <div class="expense"><div class="label">Total Expenses</div><div class="value">PKR ${formatPKR(expenses)}</div></div>
     <div class="net"><div class="label">Net Balance</div><div class="value">PKR ${formatPKR(net)}</div></div>
   </div>
-  <table><thead><tr><th>Date</th><th>Type</th><th>Category</th><th>Title</th><th style="text-align:right">Amount</th></tr></thead><tbody>${rows}</tbody></table>
+  <table>
+    <thead>
+      <tr>
+        <th>Date</th>
+        <th>Type</th>
+        <th>Category</th>
+        <th>Title</th>
+        <th style="text-align:right">Amount</th>
+      </tr>
+    </thead>
+    <tbody>${rows}</tbody>
+  </table>
   <p class="footer">Generated by Rozana Hisaab</p>
-  <script>window.onload=function(){window.print()}</script>
-</body></html>`;
+</body>
+</html>`;
 }
 
 export function ExportModal({ open, onClose, language, dir, transactions }: ExportModalProps) {
@@ -224,12 +254,19 @@ export function ExportModal({ open, onClose, language, dir, transactions }: Expo
         }
       } else if (format === 'pdf') {
         const html = buildPrintableHTML(filtered, language, totalIncome, totalExpenses, netBalance);
-        const w = window.open('', '_blank');
-        if (w) {
-          w.document.write(html);
-          w.document.close();
+        const filename = Capacitor.isNativePlatform()
+          ? `Rozana_Hisaab_Report_${timestamp}.html`
+          : `rozana-hisaab-${stamp}.html`;
+        if (Capacitor.isNativePlatform()) {
+          await writeAndShareNativeFile(html, filename, 'text/html');
         } else {
-          downloadBlob(html, `rozana-hisaab-${stamp}.html`, 'text/html');
+          const w = window.open('', '_blank');
+          if (w) {
+            w.document.write(html);
+            w.document.close();
+          } else {
+            downloadBlob(html, filename, 'text/html');
+          }
         }
       }
 
@@ -260,7 +297,6 @@ export function ExportModal({ open, onClose, language, dir, transactions }: Expo
       subtitle={tr('exportSubtitle', language)}
       dir={dir}
     >
-      {/* Period selector */}
       <div className="mb-4">
         <label className="text-slate-400 text-xs block mb-2">{tr('exportPeriod', language)}</label>
         <div className="flex flex-wrap gap-2">
@@ -280,7 +316,6 @@ export function ExportModal({ open, onClose, language, dir, transactions }: Expo
         </div>
       </div>
 
-      {/* Custom date range */}
       {period === 'custom' && (
         <div className="grid grid-cols-2 gap-3 mb-4">
           <div>
@@ -304,7 +339,6 @@ export function ExportModal({ open, onClose, language, dir, transactions }: Expo
         </div>
       )}
 
-      {/* Preview summary */}
       <div className="rounded-2xl bg-slate-950/60 border border-slate-800 p-4 mb-4">
         <div className="space-y-2.5">
           <div className={`flex items-center gap-2 ${dir === 'rtl' ? 'flex-row-reverse' : ''}`}>
@@ -336,7 +370,6 @@ export function ExportModal({ open, onClose, language, dir, transactions }: Expo
         </p>
       </div>
 
-      {/* Format selector */}
       <div className="mb-5">
         <label className="text-slate-400 text-xs block mb-2">{tr('exportFormat', language)}</label>
         <div className="space-y-2">
