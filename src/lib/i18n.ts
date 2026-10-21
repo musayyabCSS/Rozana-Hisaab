@@ -109,7 +109,7 @@ export const t: Dict = {
   authFeatureVoice: { en: 'Instant Voice Input', ur: 'فوری آواز سے اندراج' },
   authFeatureOcr: { en: 'Receipt & Bill OCR', ur: 'رسید اور بل کی شناخت' },
   authFeaturesLabel: { en: 'App features', ur: 'ایپ کی خصوصیات' },
-  authWelcomeBack: { en: 'Welcome back', ur: 'خوش آمدید' },
+  authWelcomeBack: { en: 'Welcome to Rozana Hisaab', ur: 'روزانہ حساب میں خوش آمدید' },
   authLoginSubtitle: { en: 'Log in to your account', ur: 'اپنے اکاؤنٹ میں لاگ ان کریں' },
   authGoogle: { en: 'Sign in with Google', ur: 'گوگل کے ذریعے سائن اِن کریں' },
   authOr: { en: 'Or', ur: 'یا' },
@@ -224,7 +224,7 @@ export const t: Dict = {
   },
   consentContinue: { en: 'Continue', ur: 'جاری رکھیں' },
   consentCancel: { en: 'Cancel', ur: 'منسوخ کریں' },
-  welcomeBack: { en: 'Welcome back', ur: 'خوش آمدید' },
+  welcomeBack: { en: 'Welcome to Rozana Hisaab', ur: 'روزانہ حساب میں خوش آمدید' },
   continueDashboard: { en: 'Continue to Dashboard', ur: 'ڈیش بورڈ پر جائیں' },
 };
 
