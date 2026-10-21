@@ -1,4 +1,4 @@
-package com.cssestimation.rozanahisaab;
+package com.rozanahisaab.app;
 
 import com.getcapacitor.BridgeActivity;
 
