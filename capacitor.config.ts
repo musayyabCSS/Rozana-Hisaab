@@ -1,7 +1,7 @@
 import type { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
-  appId: 'com.cssestimation.rozanahisaab',
+  appId: 'com.rozanahisaab.app',
   appName: 'Rozana Hisaab',
   webDir: 'dist',
   plugins: {
