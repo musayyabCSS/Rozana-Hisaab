@@ -14,6 +14,8 @@ interface TransactionFeedProps {
   dir: 'ltr' | 'rtl';
   filter: 'all' | 'income' | 'expense';
   onFilterChange: (f: 'all' | 'income' | 'expense') => void;
+  showAll: boolean;
+  onShowAllChange: (showAll: boolean) => void;
   onDelete: (id: string) => void;
   onEdit: (transaction: Transaction) => void;
   onUpdate: (id: string, updates: Partial<NewTransaction>) => Promise<boolean>;
@@ -25,13 +27,14 @@ export function TransactionFeed({
   dir,
   filter,
   onFilterChange,
+  showAll,
+  onShowAllChange,
   onDelete,
   onEdit,
   onUpdate,
 }: TransactionFeedProps) {
   const [receiptPreview, setReceiptPreview] = useState<string | null>(null);
   const [receiptUnavailable, setReceiptUnavailable] = useState(false);
-  const [showAll, setShowAll] = useState(false);
   const [search, setSearch] = useState('');
   const [dateRange, setDateRange] = useState<'month' | '30days' | 'all'>('all');
   const [paymentTransaction, setPaymentTransaction] = useState<Transaction | null>(null);
@@ -171,7 +174,7 @@ export function TransactionFeed({
           {showAll && (
             <button
               type="button"
-              onClick={() => setShowAll(false)}
+              onClick={() => onShowAllChange(false)}
               className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800"
               aria-label={language === 'ur' ? 'واپس جائیں' : 'Back to dashboard'}
             >
@@ -189,7 +192,7 @@ export function TransactionFeed({
         {!showAll && (
           <button
             type="button"
-            onClick={() => setShowAll(true)}
+            onClick={() => onShowAllChange(true)}
             className="flex items-center gap-1 text-xs font-semibold text-emerald-400 hover:text-emerald-300"
           >
             {language === 'ur' ? 'سب دیکھیں' : `View All (${transactions.length})`}

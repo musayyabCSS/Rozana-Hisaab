@@ -86,6 +86,7 @@ function App() {
     typeof localStorage !== 'undefined' && localStorage.getItem('rozana-ai-media-consent') === 'true',
   );
   const [feedFilter, setFeedFilter] = useState<'all' | 'income' | 'expense'>('all');
+  const [showAllTransactions, setShowAllTransactions] = useState(false);
   const [showWelcome, setShowWelcome] = useState(
     () => onboarded && (typeof navigator === 'undefined' || navigator.onLine),
   );
@@ -165,8 +166,12 @@ function App() {
       setActiveModal(null);
     } else if (editingTransaction) {
       setEditingTransaction(null);
+    } else if (offlineCapturePrompt) {
+      setOfflineCapturePrompt(false);
     } else if (showWelcome) {
       setShowWelcome(false);
+    } else if (showAllTransactions) {
+      setShowAllTransactions(false);
     } else if (session && !loadingProfile && onboarded) {
       void CapApp.exitApp();
     } else if (window.history.length > 1) {
@@ -625,6 +630,8 @@ function App() {
           dir={dir}
           filter={feedFilter}
           onFilterChange={setFeedFilter}
+          showAll={showAllTransactions}
+          onShowAllChange={setShowAllTransactions}
           onDelete={handleDelete}
           onEdit={handleEdit}
           onUpdate={handleUpdate}
