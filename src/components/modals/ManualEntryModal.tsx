@@ -4,7 +4,7 @@ import { Modal } from '@/components/ui/Modal';
 import type { Language, TransactionType, Category, PaymentMethod, NewTransaction } from '@/types';
 import { tr } from '@/lib/i18n';
 import { getCategoryDetails, getCategoryLabel, EXPENSE_CATEGORIES, INCOME_CATEGORIES } from '@/lib/categories';
-import { isFutureDate } from '@/lib/format';
+import { getLocalDateKey, isFutureDate } from '@/lib/format';
 
 interface ManualEntryModalProps {
   open: boolean;
@@ -23,7 +23,7 @@ export function ManualEntryModal({ open, onClose, language, dir, initialDraft, o
   const [category, setCategory] = useState<Category>('fuel');
   const [title, setTitle] = useState('');
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod | null>(null);
-  const [date, setDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [date, setDate] = useState(() => getLocalDateKey());
 
   const categories = type === 'income' ? INCOME_CATEGORIES : EXPENSE_CATEGORIES;
 
@@ -40,7 +40,7 @@ export function ManualEntryModal({ open, onClose, language, dir, initialDraft, o
     );
     setTitle(initialDraft.title ?? '');
     setPaymentMethod(initialDraft.payment_method ?? null);
-    setDate(initialDraft.transaction_date ?? new Date().toISOString().split('T')[0]);
+    setDate(initialDraft.transaction_date ?? getLocalDateKey());
   }, [initialDraft, open]);
 
   const handleTypeChange = (newType: TransactionType) => {
@@ -69,7 +69,7 @@ export function ManualEntryModal({ open, onClose, language, dir, initialDraft, o
     setCategory('fuel');
     setTitle('');
     setPaymentMethod(null);
-    setDate(new Date().toISOString().split('T')[0]);
+    setDate(getLocalDateKey());
     onClose();
   };
 

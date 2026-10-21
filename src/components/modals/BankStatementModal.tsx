@@ -2,6 +2,7 @@ import { useRef, useState } from 'react';
 import { AlertCircle, Check, FileCheck, Loader2, UploadCloud } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { Modal } from '@/components/ui/Modal';
+import { getLocalDateKey } from '@/lib/format';
 import type { Category, Language, NewTransaction, PaymentMethod } from '@/types';
 import { CATEGORIES, getCategoryLabel } from '@/lib/categories';
 import { tr } from '@/lib/i18n';
@@ -90,7 +91,7 @@ function normalizeDate(value: unknown): string {
     const year = parts[3].length === 2 ? `20${parts[3]}` : parts[3];
     return `${year}-${parts[2].padStart(2, '0')}-${parts[1].padStart(2, '0')}`;
   }
-  return new Date().toISOString().slice(0, 10);
+  return getLocalDateKey();
 }
 
 const TARGET_KEYWORDS = ['date', 'description', 'title', 'narration', 'details', 'money', 'credit', 'debit', 'amount', 'category', 'method', 'inward', 'outward', 'deposit', 'withdrawal'];
@@ -155,7 +156,7 @@ function parseRows(rawGrid: unknown[][]): ParsedLine[] {
       return null;
     };
 
-    const dateVal = findVal(['date']) ?? new Date().toISOString().split('T')[0];
+    const dateVal = findVal(['date']) ?? getLocalDateKey();
     const titleVal = findVal(['description', 'title', 'narration', 'details']) ?? 'Imported Transaction';
     const title = String(titleVal).trim();
     if (!title) return [];

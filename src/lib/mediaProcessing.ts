@@ -1,5 +1,6 @@
 import type { Category, NewTransaction, Transaction } from '@/types';
 import { EXPENSE_CATEGORIES } from '@/lib/categories';
+import { getLocalDateKey } from '@/lib/format';
 import { parseReceiptImage, parseVoice, transcribeAudioWithWhisper } from '@/lib/ai';
 
 export interface MediaReviewDraft {
@@ -31,7 +32,7 @@ function createTransactionId(): string {
 }
 
 function makeTransaction(type: MediaReviewDraft['type'], draft: NewTransaction): Transaction {
-  const now = new Date().toISOString();
+  const now = new Date();
   return {
     id: createTransactionId(),
     type: draft.type,
@@ -43,8 +44,8 @@ function makeTransaction(type: MediaReviewDraft['type'], draft: NewTransaction):
     due_date: draft.due_date ?? null,
     units_consumed: draft.units_consumed ?? null,
     source: draft.source ?? (type === 'voice' ? 'voice' : 'scan'),
-    transaction_date: draft.transaction_date ?? now.slice(0, 10),
-    created_at: now,
+    transaction_date: draft.transaction_date ?? getLocalDateKey(now),
+    created_at: now.toISOString(),
     ...(draft.has_receipt !== undefined ? { has_receipt: draft.has_receipt } : {}),
     ...(draft.is_paid !== undefined ? { is_paid: draft.is_paid } : {}),
     is_synced: false,
@@ -126,7 +127,7 @@ export async function processReceiptBlob(blob: Blob): Promise<Transaction> {
   const transactionDate =
     [parsed.transaction_date, parsed.date, parsed.due_date].find(
       (date): date is string => typeof date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(date),
-    ) ?? new Date().toISOString().slice(0, 10);
+    ) ?? getLocalDateKey();
   const amount = typeof parsed.amount === 'number'
     ? parsed.amount
     : typeof parsed.amount === 'string'

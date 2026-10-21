@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
+import { getLocalDateKey } from '@/lib/format';
 import type { Transaction, NewTransaction } from '@/types';
 import { deleteReceiptImage } from '@/lib/receiptStorage';
 import {
@@ -258,7 +259,7 @@ export function useTransactions(activeUserId?: string) {
         due_date: txn.due_date ?? null,
         units_consumed: txn.units_consumed ?? null,
         source: txn.source ?? 'manual',
-        transaction_date: txn.transaction_date ?? new Date().toISOString().slice(0, 10),
+        transaction_date: txn.transaction_date ?? getLocalDateKey(),
         created_at: txn.created_at ?? new Date().toISOString(),
         ...(txn.has_receipt !== undefined ? { has_receipt: txn.has_receipt } : {}),
         ...(txn.is_paid !== undefined ? { is_paid: txn.is_paid } : {}),

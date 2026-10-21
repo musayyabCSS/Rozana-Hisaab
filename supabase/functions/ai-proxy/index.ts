@@ -58,9 +58,15 @@ serve(async (req) => {
     // 2. VOICE TEXT PARSING
     if (action === "parse-voice") {
       const now = new Date();
+      const localDateKey = (date: Date) => {
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, "0");
+        const day = String(date.getDate()).padStart(2, "0");
+        return `${year}-${month}-${day}`;
+      };
       const today = typeof body.today === "string"
         ? body.today
-        : `Today's Date: ${now.toISOString().split("T")[0]} (${now.toLocaleDateString("en-US", { weekday: "long" })})`;
+        : `Today's Date: ${localDateKey(now)} (${now.toLocaleDateString("en-US", { weekday: "long" })})`;
       const chatRes = await fetch("https://api.openai.com/v1/chat/completions", {
         method: "POST",
         headers: {

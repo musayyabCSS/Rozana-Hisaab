@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import type { NewTransaction, Transaction, Language } from '@/types';
 import { tr } from '@/lib/i18n';
 import { getCategoryEmoji, getCategoryLabel } from '@/lib/categories';
-import { formatDate, formatPKR, getRelativeDate, isFutureDate } from '@/lib/format';
+import { formatDate, formatPKR, getLocalDateKey, getRelativeDate, isFutureDate } from '@/lib/format';
 import { filterTransactions } from '@/lib/format';
 import { getReceiptImage } from '@/lib/receiptStorage';
 import { Modal } from '@/components/ui/Modal';
@@ -17,13 +17,6 @@ interface TransactionFeedProps {
   onDelete: (id: string) => void;
   onEdit: (transaction: Transaction) => void;
   onUpdate: (id: string, updates: Partial<NewTransaction>) => Promise<boolean>;
-}
-
-function toLocalDateKey(date: Date): string {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
 }
 
 export function TransactionFeed({
@@ -42,7 +35,7 @@ export function TransactionFeed({
   const [search, setSearch] = useState('');
   const [dateRange, setDateRange] = useState<'month' | '30days' | 'all'>('all');
   const [paymentTransaction, setPaymentTransaction] = useState<Transaction | null>(null);
-  const [paymentDate, setPaymentDate] = useState(() => toLocalDateKey(new Date()));
+  const [paymentDate, setPaymentDate] = useState(() => getLocalDateKey());
   const [isMarkingPaid, setIsMarkingPaid] = useState(false);
   const [paymentError, setPaymentError] = useState<string | null>(null);
 
@@ -55,10 +48,10 @@ export function TransactionFeed({
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  const todayKey = toLocalDateKey(today);
+  const todayKey = getLocalDateKey(today);
   const yesterday = new Date(today);
   yesterday.setDate(yesterday.getDate() - 1);
-  const yesterdayKey = toLocalDateKey(yesterday);
+  const yesterdayKey = getLocalDateKey(yesterday);
 
   const visibleTransactions = filterTransactions(transactions, filter)
     .filter((transaction) => {
@@ -356,7 +349,7 @@ export function TransactionFeed({
                               type="button"
                               onClick={() => {
                                 setPaymentTransaction(txn);
-                                setPaymentDate(toLocalDateKey(new Date()));
+                                setPaymentDate(getLocalDateKey());
                                 setPaymentError(null);
                               }}
                               className="flex shrink-0 items-center gap-1 whitespace-nowrap rounded-lg bg-amber-500/10 px-2 py-1.5 text-[10px] font-semibold text-amber-300 hover:bg-amber-500/20"
@@ -511,7 +504,7 @@ export function TransactionFeed({
                 id="payment-confirm-date"
                 type="date"
                 value={paymentDate}
-                max={toLocalDateKey(new Date())}
+                max={getLocalDateKey()}
                 onChange={(event) => setPaymentDate(event.target.value)}
                 className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2.5 text-slate-100 text-sm focus:outline-none focus:border-amber-500"
                 required

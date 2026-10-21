@@ -1,5 +1,6 @@
 import type { Category, TransactionType, PaymentMethod } from '@/types';
 import { invokeAiProxy, type AiErrorKind } from '@/lib/aiClient';
+import { getLocalDateKey } from '@/lib/format';
 
 const WHISPER_CONTEXT_PROMPT =
   'Rozana Hisaab personal finance ledger: LESCO electricity bill paid do din pehly 20000, parcel ki payment received Adil 5000, Shell se 5000 ka fuel lia, 1200 ki sabzi li, salary received, dukaan ka kharcha, paid, received.';
@@ -80,7 +81,7 @@ export async function transcribeAudioWithWhisper(
 // 2. Parse Voice Transcription Text into Transaction Fields
 export async function parseVoice(text: string): Promise<ParsedVoiceResult> {
   const now = new Date();
-  const today = `Today's Date: ${now.toISOString().split('T')[0]} (${now.toLocaleDateString('en-US', { weekday: 'long' })})`;
+  const today = `Today's Date: ${getLocalDateKey(now)} (${now.toLocaleDateString('en-US', { weekday: 'long' })})`;
   const data = requireAiData(await invokeAiProxy<ParsedVoiceResult>({
     action: 'parse-voice',
     text,

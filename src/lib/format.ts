@@ -1,5 +1,12 @@
 import type { Transaction } from '@/types';
 
+export function getLocalDateKey(date: Date = new Date()): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
 export function formatPKR(amount: number): string {
   return amount.toLocaleString('en-PK', {
     minimumFractionDigits: 0,
@@ -17,8 +24,15 @@ export function formatPKRShort(amount: number): string {
   return String(amount);
 }
 
+function parseDate(dateStr: string): Date {
+  const dateKey = dateStr.slice(0, 10);
+  return /^\d{4}-\d{2}-\d{2}$/.test(dateKey)
+    ? new Date(`${dateKey}T00:00:00`)
+    : new Date(dateStr);
+}
+
 export function formatDate(dateStr: string, lang: 'en' | 'ur'): string {
-  const date = new Date(dateStr);
+  const date = parseDate(dateStr);
   if (lang === 'ur') {
     return date.toLocaleDateString('ur-PK', { day: 'numeric', month: 'long', year: 'numeric' });
   }
@@ -52,16 +66,12 @@ export function getRelativeDate(dateStr: string, lang: 'en' | 'ur'): string {
 
 export function isFutureDate(dateStr: string): boolean {
   const dateKey = dateStr.slice(0, 10);
-  const today = new Date();
-  const todayKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(
-    today.getDate(),
-  ).padStart(2, '0')}`;
-  return dateKey > todayKey;
+  return dateKey > getLocalDateKey();
 }
 
 export function getMonthStats(transactions: Transaction[], year: number, month: number) {
   const filtered = transactions.filter((t) => {
-    const d = new Date(t.transaction_date);
+    const d = parseDate(t.transaction_date);
     return (
       t.is_paid !== false &&
       !isFutureDate(t.transaction_date) &&

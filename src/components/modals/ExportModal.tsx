@@ -6,7 +6,7 @@ import { Share } from '@capacitor/share';
 import { Modal } from '@/components/ui/Modal';
 import type { Language, Transaction } from '@/types';
 import { tr } from '@/lib/i18n';
-import { formatPKR } from '@/lib/format';
+import { formatPKR, getLocalDateKey } from '@/lib/format';
 import { getCategoryLabel } from '@/lib/categories';
 
 interface ExportModalProps {
@@ -19,10 +19,6 @@ interface ExportModalProps {
 
 type Period = 'day' | 'week' | 'month' | 'custom' | 'lifetime';
 type Format = 'pdf' | 'excel' | 'csv';
-
-function dateToISOLocal(d: Date): string {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
 
 function downloadBlob(content: string, filename: string, mime: string) {
   const blob = new Blob([content], { type: mime });
@@ -174,7 +170,7 @@ function buildPrintableHTML(txns: Transaction[], lang: Language, income: number,
 
 export function ExportModal({ open, onClose, language, dir, transactions }: ExportModalProps) {
   const now = new Date();
-  const todayStr = dateToISOLocal(now);
+  const todayStr = getLocalDateKey(now);
   const monthStartStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
 
   const [period, setPeriod] = useState<Period>('month');
@@ -192,7 +188,7 @@ export function ExportModal({ open, onClose, language, dir, transactions }: Expo
     }
     if (period === 'week') {
       const weekAgo = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 7);
-      const weekAgoStr = dateToISOLocal(weekAgo);
+      const weekAgoStr = getLocalDateKey(weekAgo);
       return transactions.filter((t) => t.transaction_date >= weekAgoStr && t.transaction_date <= todayStr);
     }
     if (period === 'month') {
@@ -228,7 +224,7 @@ export function ExportModal({ open, onClose, language, dir, transactions }: Expo
 
   const handleGenerate = async () => {
     const timestamp = Date.now();
-    const stamp = new Date().toISOString().split('T')[0];
+    const stamp = getLocalDateKey();
     setExporting(true);
     setExportError(null);
     try {

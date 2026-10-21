@@ -19,11 +19,21 @@ webpush.setVapidDetails(
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
+function getPakistanDateKey(date = new Date()) {
+  const parts = new Intl.DateTimeFormat('en', {
+    timeZone: 'Asia/Karachi',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(date);
+  const values = Object.fromEntries(parts.map(({ type, value }) => [type, value]));
+  return `${values.year}-${values.month}-${values.day}`;
+}
+
 async function runDailyReminders() {
   console.log('--- Starting Daily Due Bill Check ---');
 
-  // Compute today's date in PKT (UTC+5)
-  const pktDate = new Date(Date.now() + 5 * 3600 * 1000).toISOString().split('T')[0];
+  const pktDate = getPakistanDateKey();
   console.log(`Checking unpaid transactions due on: ${pktDate}`);
 
   // Fetch unpaid transactions due today
