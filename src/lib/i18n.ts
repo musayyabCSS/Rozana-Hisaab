@@ -196,6 +196,35 @@ export const t: Dict = {
     ur: 'AI سروس عارضی طور پر دستیاب نہیں۔ میڈیا پر دوبارہ کوشش کی جائے گی۔',
   },
   settingsTitle: { en: 'Settings', ur: 'ترتیبات' },
+  notificationTitle: { en: 'Daily Reminders / Push Notifications', ur: 'روزانہ یاد دہانیاں / پش اطلاعات' },
+  notificationHelp: {
+    en: 'Get daily reminders on Android and push alerts for bills due today on web.',
+    ur: 'اینڈرائیڈ پر روزانہ یاد دہانی اور ویب پر آج واجب الادا بلوں کی پش اطلاع حاصل کریں۔',
+  },
+  notificationTime: { en: 'Daily reminder time: 12:30 PM', ur: 'روزانہ یاد دہانی کا وقت: دوپہر ۱۲:۳۰' },
+  notificationChecking: { en: 'Checking notification settings…', ur: 'اطلاعات کی ترتیبات دیکھی جا رہی ہیں…' },
+  notificationEnabled: { en: 'Notifications are enabled.', ur: 'اطلاعات فعال ہیں۔' },
+  notificationDisabled: { en: 'Notifications are disabled.', ur: 'اطلاعات غیر فعال ہیں۔' },
+  notificationPermissionDenied: {
+    en: 'Notification permission was not granted. You can enable it in your device or browser settings.',
+    ur: 'اطلاعات کی اجازت نہیں ملی۔ آپ اسے اپنے آلے یا براؤزر کی ترتیبات میں فعال کر سکتے ہیں۔',
+  },
+  notificationUnsupported: {
+    en: 'Notifications are not supported in this browser.',
+    ur: 'اس براؤزر میں اطلاعات دستیاب نہیں ہیں۔',
+  },
+  notificationLoginRequired: {
+    en: 'Sign in to enable web push reminders.',
+    ur: 'ویب پش یاد دہانیاں فعال کرنے کے لیے سائن اِن کریں۔',
+  },
+  notificationVapidMissing: {
+    en: 'Web push is not configured. Please contact support.',
+    ur: 'ویب پش ترتیب نہیں دی گئی۔ براہ کرم سپورٹ سے رابطہ کریں۔',
+  },
+  notificationOperationFailed: {
+    en: 'Could not update notification settings. Please try again.',
+    ur: 'اطلاعات کی ترتیبات تبدیل نہیں ہو سکیں۔ دوبارہ کوشش کریں۔',
+  },
   settingsDeleteMedia: { en: 'Delete my media', ur: 'میڈیا حذف کریں' },
   settingsDeleteMediaHelp: { en: 'Remove saved voice clips and receipt photos from this device.', ur: 'اس ڈیوائس سے محفوظ آواز کے کلپس اور رسیدوں کی تصاویر حذف کریں۔' },
   settingsMediaDeleted: { en: 'Saved media deleted from this device.', ur: 'اس ڈیوائس سے محفوظ میڈیا حذف کر دیا گیا ہے۔' },

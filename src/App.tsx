@@ -587,7 +587,6 @@ function App() {
         onImportBank={() => setActiveModal('bank')}
         onOpenSettings={() => setActiveModal('settings')}
         onLogout={handleLogout}
-        userId={session?.user?.id}
       />
       <main
         ref={dashboardRef}
@@ -721,6 +720,7 @@ function App() {
         dir={dir}
         onDeleteMedia={deleteAllReceiptImages}
         onDeleteData={deleteAllTransactions}
+        userId={session.user.id}
       />
       <PrivacyConsentModal
         open={captureConsentOpen}

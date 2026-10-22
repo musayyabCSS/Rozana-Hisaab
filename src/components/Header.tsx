@@ -1,10 +1,8 @@
 import { useRef, useState } from 'react';
-import { Languages, Camera, FileUp, LogOut, Bell, BellRing, Settings } from 'lucide-react';
+import { Languages, Camera, FileUp, LogOut, Settings } from 'lucide-react';
 import type { Language } from '@/types';
-import { Capacitor } from '@capacitor/core';
 import { tr } from '@/lib/i18n';
 import type { UserProfile } from '@/hooks/useProfile';
-import { usePushNotifications } from '@/hooks/usePushNotifications';
 import { validateAvatarFile } from '@/lib/avatar';
 
 interface HeaderProps {
@@ -17,7 +15,6 @@ interface HeaderProps {
   onImportBank: () => void;
   onOpenSettings: () => void;
   onLogout: () => void;
-  userId?: string; // Passed from App.tsx session.user.id
 }
 
 function getInitials(name: string, lang: Language): string {
@@ -39,7 +36,6 @@ export function Header({
   onImportBank,
   onOpenSettings,
   onLogout,
-  userId,
 }: HeaderProps) {
   const fileRef = useRef<HTMLInputElement>(null);
   const [avatarError, setAvatarError] = useState<string | null>(null);
@@ -50,10 +46,6 @@ export function Header({
     (typeof userMetadata?.avatar_url === 'string' ? userMetadata.avatar_url : null) ??
     (typeof userMetadata?.picture === 'string' ? userMetadata.picture : null);
   const initials = profile ? getInitials(profile.name, language) : language === 'ur' ? 'م' : 'MH';
-  const isNative = Capacitor.isNativePlatform();
-  
-  // Initialize Push Notifications Hook
-  const { isSubscribed, subscribeToPush, loading } = usePushNotifications(userId);
 
   const handlePhotoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -120,25 +112,6 @@ export function Header({
         </div>
 
         <div className={`flex shrink-0 items-center gap-1.5 ${dir === 'rtl' ? 'flex-row-reverse' : ''}`}>
-          
-          {/* Push Notification Toggle Button */}
-          {!isNative && <button
-            onClick={subscribeToPush}
-            disabled={loading || isSubscribed}
-            title={isSubscribed ? 'Reminders Active' : 'Enable Reminders'}
-            className={`flex items-center justify-center h-9 w-9 sm:w-auto sm:px-3 sm:py-2 rounded-xl border transition-all active:scale-95 ${
-              isSubscribed
-                ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30 cursor-default'
-                : 'bg-slate-800/80 hover:bg-emerald-500/20 text-slate-300 hover:text-emerald-400 border-slate-700 hover:border-emerald-500/30'
-            }`}
-            aria-label="Toggle Reminders"
-          >
-            {isSubscribed ? <BellRing size={16} /> : <Bell size={16} />}
-            <span className="text-xs font-semibold hidden sm:inline sm:ml-1.5">
-              {isSubscribed ? 'Active' : 'Alerts'}
-            </span>
-          </button>}
-
           {/* Import Bank Button */}
           <button
             onClick={onImportBank}
