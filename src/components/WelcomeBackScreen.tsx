@@ -1,4 +1,6 @@
-import { ArrowRight, Languages } from 'lucide-react';
+import { useState } from 'react';
+import { ArrowRight } from 'lucide-react';
+import { LanguageIcon } from '@/components/ui/LanguageIcon';
 import type { Language } from '@/types';
 import { tr } from '@/lib/i18n';
 import type { UserProfile } from '@/hooks/useProfile';
@@ -12,6 +14,9 @@ interface WelcomeBackScreenProps {
 }
 
 export function WelcomeBackScreen({ profile, language, dir, onToggleLanguage, onContinue }: WelcomeBackScreenProps) {
+  const [failedAvatar, setFailedAvatar] = useState<string | null>(null);
+  const avatar = profile.avatar === failedAvatar ? null : profile.avatar;
+
   return (
     <div className="fixed inset-0 z-50 bg-slate-950 flex items-center justify-center" dir={dir}>
       <div className="absolute inset-0 overflow-hidden">
@@ -26,7 +31,7 @@ export function WelcomeBackScreen({ profile, language, dir, onToggleLanguage, on
         style={dir === 'rtl' ? { left: '1rem' } : { right: '1rem' }}
         aria-label="Toggle language"
       >
-        <Languages size={16} className="text-emerald-400" />
+        <LanguageIcon size={18} className="text-emerald-400" />
         <span className="text-xs font-semibold">
           {language === 'en' ? 'EN / اردو' : 'اردو / EN'}
         </span>
@@ -35,9 +40,15 @@ export function WelcomeBackScreen({ profile, language, dir, onToggleLanguage, on
       <div className="relative w-full max-w-md px-6 flex flex-col items-center animate-[fadeIn_0.5s_ease-out]">
         {/* Avatar */}
         <div className="mb-5">
-          {profile.avatar ? (
+          {avatar ? (
             <div className="w-24 h-24 rounded-full overflow-hidden border-4 border-slate-800 shadow-xl shadow-emerald-500/20">
-              <img src={profile.avatar} alt={profile.name} className="w-full h-full object-cover" />
+              <img
+                src={avatar}
+                alt={profile.name}
+                referrerPolicy="no-referrer"
+                onError={() => setFailedAvatar(avatar)}
+                className="w-full h-full object-cover"
+              />
             </div>
           ) : (
             <img

@@ -5,6 +5,7 @@ import { Camera as NativeCamera, CameraResultType, CameraSource } from '@capacit
 import { Modal } from '@/components/ui/Modal';
 import type { Language, NewTransaction, Transaction } from '@/types';
 import { tr } from '@/lib/i18n';
+import { MediaProcessingError } from '@/lib/mediaProcessing';
 
 interface ScanModalProps {
   open: boolean;
@@ -166,9 +167,11 @@ export function ScanModal({
       onReviewRef.current(transaction, blob);
     } catch (error) {
       console.error('Could not process receipt image:', error);
-      setCaptureError(language === 'ur'
-        ? 'کنکشن ناکام ہو گیا۔ براہ کرم اپنا انٹرنیٹ کنکشن چیک کریں۔'
-        : 'Connection failed. Please check your internet connection.');
+      setCaptureError(error instanceof MediaProcessingError && error.kind === 'limit'
+        ? tr('aiLimitReached', language)
+        : language === 'ur'
+          ? 'کنکشن ناکام ہو گیا۔ براہ کرم اپنا انٹرنیٹ کنکشن چیک کریں۔'
+          : 'Connection failed. Please check your internet connection.');
     } finally {
       setProcessing(false);
     }
@@ -361,7 +364,7 @@ export function ScanModal({
           <div className="flex flex-col gap-3">
             {capturedImage && <img src={capturedImage} alt={tr('receiptPhotoAlt', language)} className="max-h-48 w-full rounded-xl object-contain" />}
             <div className="flex gap-2">
-              <button type="button" onClick={retryProcessing} className="flex-1 rounded-xl bg-emerald-500 px-3 py-2.5 text-sm font-semibold text-slate-950">
+              <button type="button" onClick={retryProcessing} className="flex-1 rounded-xl bg-emerald-500 px-3 py-2.5 text-sm font-semibold text-ink">
                 🔄 {language === 'ur' ? 'دوبارہ کوشش کریں' : 'Retry'}
               </button>
               <button type="button" onClick={switchToManual} className="flex-1 rounded-xl border border-slate-700 px-3 py-2.5 text-sm text-slate-200">
@@ -384,7 +387,7 @@ export function ScanModal({
               type="button"
               onClick={capturePhoto}
               disabled={!cameraReady}
-              className="flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-500 py-3 text-sm font-bold text-slate-950 disabled:opacity-50"
+              className="flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-500 py-3 text-sm font-bold text-ink disabled:opacity-50"
             >
               <Camera size={17} />
               {tr('capturePhoto', language)}

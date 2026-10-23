@@ -1,5 +1,6 @@
 import { useEffect, useState, useRef } from 'react';
-import { Camera, Check, User, Sparkles, Languages } from 'lucide-react';
+import { Camera, Check, User, Sparkles } from 'lucide-react';
+import { LanguageIcon } from '@/components/ui/LanguageIcon';
 import type { Language } from '@/types';
 import { tr } from '@/lib/i18n';
 import { validateAvatarFile } from '@/lib/avatar';
@@ -73,7 +74,7 @@ export function OnboardingModal({ language, dir, onToggleLanguage, onComplete }:
         style={dir === 'rtl' ? { left: '1rem' } : { right: '1rem' }}
         aria-label="Toggle language"
       >
-        <Languages size={16} className="text-emerald-400" />
+        <LanguageIcon size={18} className="text-emerald-400" />
         <span className="text-xs font-semibold">
           {language === 'en' ? 'EN / اردو' : 'اردو / EN'}
         </span>

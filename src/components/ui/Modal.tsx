@@ -55,7 +55,7 @@ export function Modal({
           <button
             onClick={onClose}
             disabled={closeDisabled}
-            className="shrink-0 p-2 -mt-1 -me-2 rounded-full hover:bg-slate-800 transition-colors text-slate-400 hover:text-slate-100"
+            className="shrink-0 p-2 -mt-1 -me-2 rounded-full hover:bg-slate-800 transition-colors text-slate-400 hover:text-slate-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/60"
             aria-label="Close"
           >
             <X size={20} />

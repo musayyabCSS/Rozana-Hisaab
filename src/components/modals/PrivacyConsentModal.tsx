@@ -32,7 +32,7 @@ export function PrivacyConsentModal({
           <button
             type="button"
             onClick={onAccept}
-            className="flex-1 rounded-xl bg-emerald-500 px-4 py-3 text-sm font-semibold text-slate-950"
+            className="flex-1 rounded-xl bg-emerald-500 px-4 py-3 text-sm font-semibold text-ink"
           >
             {tr('consentContinue', language)}
           </button>

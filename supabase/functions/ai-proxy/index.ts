@@ -1,26 +1,131 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "jsr:@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-serve(async (req) => {
+// Upper bounds on request payloads. The client already compresses receipts
+// below 7M base64 chars and caps voice notes at 60 seconds.
+const MAX_IMAGE_BASE64_LENGTH = 7_500_000;
+const MAX_AUDIO_BASE64_LENGTH = 8_000_000;
+const MAX_TEXT_LENGTH = 2_000;
+const MAX_PROMPT_LENGTH = 1_000;
+const MAX_TODAY_LENGTH = 100;
+
+// Per-user rate limits across all actions. A voice entry uses two calls
+// (transcribe + parse-voice), a receipt scan uses one.
+const MAX_CALLS_PER_HOUR = 60;
+const MAX_CALLS_PER_DAY = 300;
+
+function jsonResponse(body: unknown, status: number): Response {
+  if (status >= 400) {
+    console.warn("ai-proxy responded with an error", status, JSON.stringify(body).slice(0, 500));
+  }
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { ...corsHeaders, "Content-Type": "application/json", "X-Ai-Proxy": "1" },
+  });
+}
+
+// The client reads `error.message` from failed responses (see src/lib/aiClient.ts).
+function errorResponse(message: string, status: number): Response {
+  return jsonResponse({ error: { message } }, status);
+}
+
+function isTooLong(value: unknown, max: number): boolean {
+  return typeof value === "string" && value.length > max;
+}
+
+async function countCallsSince(
+  admin: ReturnType<typeof createClient>,
+  userId: string,
+  since: Date,
+): Promise<number> {
+  const { count, error } = await admin
+    .from("ai_usage")
+    .select("id", { count: "exact", head: true })
+    .eq("user_id", userId)
+    .gte("created_at", since.toISOString());
+  if (error) throw new Error(`Could not read AI usage: ${error.message}`);
+  return count ?? 0;
+}
+
+Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
   }
 
   try {
     const apiKey = Deno.env.get("OPENAI_API_KEY");
-    if (!apiKey) {
-      return new Response(
-        JSON.stringify({ error: "OpenAI API key not configured on Supabase" }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+    const supabaseUrl = Deno.env.get("SUPABASE_URL");
+    const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
+    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    if (!apiKey || !supabaseUrl || !anonKey || !serviceRoleKey) {
+      return errorResponse("AI service is not configured on Supabase", 500);
+    }
+
+    // The platform JWT check accepts the public anon key, so require a real
+    // signed-in user before spending OpenAI credits.
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader) return errorResponse("Sign in to use AI features", 401);
+    const userClient = createClient(supabaseUrl, anonKey, {
+      global: { headers: { Authorization: authHeader } },
+      auth: { persistSession: false },
+    });
+    const { data: { user }, error: userError } = await userClient.auth.getUser();
+    if (userError || !user) {
+      console.warn("ai-proxy auth failed", userError?.status, userError?.message);
+      return errorResponse("Sign in to use AI features", 401);
     }
 
     const body = await req.json();
     const action = body.action || (body.imageBase64 ? "receipt" : body.audioBase64 ? "transcribe" : "parse-voice");
+    console.log("ai-proxy request", {
+      action,
+      user: user.id,
+      audioLength: typeof body.audioBase64 === "string" ? body.audioBase64.length : null,
+      imageLength: typeof body.imageBase64 === "string" ? body.imageBase64.length : null,
+      textLength: typeof body.text === "string" ? body.text.length : null,
+    });
+
+    if (action !== "transcribe" && action !== "parse-voice" && action !== "receipt") {
+      return errorResponse("Invalid action", 400);
+    }
+    if (action === "transcribe" && typeof body.audioBase64 !== "string") {
+      return errorResponse("audioBase64 is required", 400);
+    }
+    if (action === "parse-voice" && typeof body.text !== "string") {
+      return errorResponse("text is required", 400);
+    }
+    if (action === "receipt" && typeof body.imageBase64 !== "string") {
+      return errorResponse("imageBase64 is required", 400);
+    }
+    if (
+      isTooLong(body.audioBase64, MAX_AUDIO_BASE64_LENGTH) ||
+      isTooLong(body.imageBase64, MAX_IMAGE_BASE64_LENGTH) ||
+      isTooLong(body.text, MAX_TEXT_LENGTH) ||
+      isTooLong(body.prompt, MAX_PROMPT_LENGTH) ||
+      isTooLong(body.today, MAX_TODAY_LENGTH)
+    ) {
+      return errorResponse("Request is too large", 413);
+    }
+
+    const admin = createClient(supabaseUrl, serviceRoleKey, {
+      auth: { persistSession: false },
+    });
+    const now = Date.now();
+    const [hourlyCalls, dailyCalls] = await Promise.all([
+      countCallsSince(admin, user.id, new Date(now - 60 * 60 * 1000)),
+      countCallsSince(admin, user.id, new Date(now - 24 * 60 * 60 * 1000)),
+    ]);
+    if (hourlyCalls >= MAX_CALLS_PER_HOUR || dailyCalls >= MAX_CALLS_PER_DAY) {
+      return errorResponse("AI usage limit reached. Please try again later.", 429);
+    }
+    const { error: usageError } = await admin
+      .from("ai_usage")
+      .insert({ user_id: user.id, action });
+    if (usageError) throw new Error(`Could not record AI usage: ${usageError.message}`);
 
     // 1. AUDIO TRANSCRIPTION (Whisper)
     if (action === "transcribe") {
@@ -49,24 +154,21 @@ serve(async (req) => {
       });
 
       const whisperData = await whisperRes.json();
-      return new Response(JSON.stringify(whisperData), {
-        status: whisperRes.status,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return jsonResponse(whisperData, whisperRes.status);
     }
 
     // 2. VOICE TEXT PARSING
     if (action === "parse-voice") {
-      const now = new Date();
       const localDateKey = (date: Date) => {
         const year = date.getFullYear();
         const month = String(date.getMonth() + 1).padStart(2, "0");
         const day = String(date.getDate()).padStart(2, "0");
         return `${year}-${month}-${day}`;
       };
+      const nowDate = new Date(now);
       const today = typeof body.today === "string"
         ? body.today
-        : `Today's Date: ${localDateKey(now)} (${now.toLocaleDateString("en-US", { weekday: "long" })})`;
+        : `Today's Date: ${localDateKey(nowDate)} (${nowDate.toLocaleDateString("en-US", { weekday: "long" })})`;
       const chatRes = await fetch("https://api.openai.com/v1/chat/completions", {
         method: "POST",
         headers: {
@@ -93,13 +195,15 @@ Understand Pakistani vernacular and mixed terminology:
 - LESCO/K-Electric/SNGPL indicate utility bills; use category "bills" (the app's Utilities-equivalent category).
 - Careem/Bykea, taxi, bus, or train fares indicate category "transport". Fuel/Petrol/Shell indicate category "fuel".
 - Dukaan/Sauda/Sabzi/Kirana indicate groceries; use category "groceries".
+- Prepared meals and eating out (khana, lunch, dinner, nashta, chai, restaurant, dhaba, hotel, takeaway, Foodpanda, KFC, pizza, burger, biryani) indicate category "food". Raw ingredients and household supplies stay "groceries".
+- Money received from an employer or office to spend on office needs (office ne paise diye, petty cash, imprest, funds for stationery/equipment/supplies, office kharcha advance) is income with category "office_funds", not "salary".
 - Preserve person/merchant names such as Adil/Kashif/Ali/Ahmed in the transaction title.
 Correctly interpret phonetically written English words in Urdu script (e.g., "ڈالری" or "سیلری" means Salary, "ریسیود" means Received, "بل" means Bill).
 For example, classify "Electricity bill 25000" as category "bills", title "Electricity Bill", amount 25000, type "expense". Classify "parcel ki payment received Adil 5000" as income and include Adil in the title.
 Return strictly valid JSON with this exact schema:
 {
   "amount": number,
-  "category": "salary" | "business" | "freelance" | "rental_income" | "commission" | "loan" | "scholarship" | "transport" | "fuel" | "bills" | "groceries" | "medical" | "udhaar" | "rent" | "school_fee" | "mechanic" | "misc_expense",
+  "category": "salary" | "business" | "freelance" | "rental_income" | "commission" | "loan" | "scholarship" | "office_funds" | "transport" | "fuel" | "bills" | "groceries" | "food" | "medical" | "udhaar" | "rent" | "school_fee" | "mechanic" | "misc_expense",
   "title": string,
   "type": "income" | "expense",
   "paymentMethod": "cash" | "bank_transfer" | "easypaisa" | "jazzcash" | "card" | null,
@@ -118,72 +222,62 @@ Return strictly valid JSON with this exact schema:
 
       const chatData = await chatRes.json();
       const content = chatData?.choices?.[0]?.message?.content;
-      return new Response(content || JSON.stringify({ error: "Failed to parse text" }), {
+      if (!chatRes.ok) console.warn("ai-proxy OpenAI parse-voice failed", chatRes.status, JSON.stringify(chatData).slice(0, 500));
+      return new Response(content || JSON.stringify({ error: { message: "Failed to parse text" } }), {
         status: chatRes.status,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        headers: { ...corsHeaders, "Content-Type": "application/json", "X-Ai-Proxy": "1" },
       });
     }
 
     // 3. RECEIPT & BILL OCR SCANNING
-    if (action === "receipt") {
-      const chatRes = await fetch("https://api.openai.com/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${apiKey}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model: "gpt-4o-mini",
-          response_format: { type: "json_object" },
-          messages: [
-            {
-              role: "user",
-              content: [
-                {
-                  type: "text",
-                  text: `Analyze this receipt or bill image. Return a JSON object with these exact keys:
-- title: for an incoming payment from an individual/client, use the person's/client's name (not generic text such as "Payment Received"). For a utility bill, use the provider name (such as LESCO or PTCL). Otherwise use a concise transaction title.
+    const chatRes = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "gpt-4o-mini",
+        response_format: { type: "json_object" },
+        messages: [
+          {
+            role: "user",
+            content: [
+              {
+                type: "text",
+                text: `Analyze this receipt or bill image. Return a JSON object with these exact keys:
+- title: for an incoming payment from an individual/client, use the person's/client's name (not generic text such as "Payment Received"). For a utility bill, use the provider name (such as LESCO or PTCL). For a bank, credit card, or loan statement, use the bank and product name (such as "HBL ReadyCash" or "Meezan Credit Card"). Never use the name of the customer or account holder the document is addressed to. Otherwise use a concise transaction title.
 - amount: numeric amount in PKR, or 0 if not found
 - type: use "income" when money is received, deposited, or paid to a person/client; otherwise "expense"
-- category: for vehicle maintenance, car repair, parts, labour, periodic maintenance, workshop, or mechanic invoices, strictly use "mechanic". For taxi, bus, or train fares, use "transport". For incoming client payments use "freelance". For other transactions, choose exactly one of "salary", "business", "rental_income", "commission", "loan", "scholarship", "transport", "fuel", "bills", "groceries", "medical", "udhaar", "rent", "school_fee", or "misc_expense".
+- category: for vehicle maintenance, car repair, parts, labour, periodic maintenance, workshop, or mechanic invoices, strictly use "mechanic". For credit card, running finance (such as ReadyCash), personal loan, or installment statements, use type "expense" and category "udhaar" (loan repayment), with amount set to the minimum amount due if shown, otherwise the total amount due. For taxi, bus, or train fares, use "transport". For restaurant, cafe, takeaway, or food delivery receipts (prepared meals), use "food"; supermarket and kirana receipts stay "groceries". For incoming client payments use "freelance". For petty cash vouchers or funds issued by an office/employer for office supplies or equipment, use type "income" and category "office_funds". For other transactions, choose exactly one of "salary", "business", "rental_income", "commission", "loan", "scholarship", "office_funds", "transport", "fuel", "bills", "groceries", "food", "medical", "udhaar", "rent", "school_fee", or "misc_expense".
 - vendor: for incoming payments, extract the client's/person's name (not generic labels); for expenses, extract the merchant name; or empty string if not visible
 - provider: service/provider name, or empty string
 - transaction_date: the printed or stamped invoice/receipt date in YYYY-MM-DD format (for example, "2026-08-09"). Never omit this if a date appears on the paper. Convert dates such as "09-AUG-2026" to "2026-08-09".
-- due_date: only for utility bills or scheduled bills with an explicit due date, in YYYY-MM-DD format; otherwise use an empty string
+- due_date: only for utility bills, credit card/loan statements, or other scheduled bills with an explicit due date (such as "Due Date: 20th May 2026"), in YYYY-MM-DD format; otherwise use an empty string
+- is_paid: true if the document shows the payment is already completed (a shop/sale receipt, cash memo, payment confirmation, transfer receipt, or a PAID stamp); false if it is a bill, invoice, or statement still awaiting payment
 - units_consumed: quantity/units shown, or empty string
 - consumer_number: account/consumer reference if shown, or empty string
 - description: brief summary of the receipt`
-                },
-                {
-                  type: "image_url",
-                  image_url: {
-                    url: body.imageBase64.startsWith("data:")
-                      ? body.imageBase64
-                      : `data:image/jpeg;base64,${body.imageBase64}`
-                  }
+              },
+              {
+                type: "image_url",
+                image_url: {
+                  url: body.imageBase64.startsWith("data:")
+                    ? body.imageBase64
+                    : `data:image/jpeg;base64,${body.imageBase64}`
                 }
-              ]
-            }
-          ],
-          max_tokens: 600,
-        }),
-      });
-
-      const chatData = await chatRes.json();
-      return new Response(JSON.stringify(chatData), {
-        status: chatRes.status,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    return new Response(JSON.stringify({ error: "Invalid action" }), {
-      status: 400,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+              }
+            ]
+          }
+        ],
+        max_tokens: 600,
+      }),
     });
+
+    const chatData = await chatRes.json();
+    return jsonResponse(chatData, chatRes.status);
   } catch (error) {
-    return new Response(
-      JSON.stringify({ error: (error as Error).message }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+    console.error("ai-proxy unexpected error", error);
+    return errorResponse((error as Error).message, 500);
   }
 });

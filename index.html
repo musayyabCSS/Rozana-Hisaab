@@ -7,6 +7,17 @@
     <link rel="manifest" href="/manifest.json" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
     <meta name="theme-color" content="#0f172a" />
+    <script>
+      // Set the saved theme before first paint to avoid a dark flash in light mode.
+      // Mirrors resolveTheme() in src/hooks/useTheme.ts.
+      try {
+        var savedTheme = localStorage.getItem('rozana-hisaab-theme');
+        var prefersLight = window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches;
+        if (savedTheme === 'light' || (savedTheme !== 'dark' && prefersLight)) {
+          document.documentElement.dataset.theme = 'light';
+        }
+      } catch (e) {}
+    </script>
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />

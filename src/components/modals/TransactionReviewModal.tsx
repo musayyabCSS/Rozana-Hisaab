@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { ArrowDownLeft, ArrowUpRight, Check } from 'lucide-react';
 import { Modal } from '@/components/ui/Modal';
-import { formatPKR } from '@/lib/format';
+import { formatDate, formatPKR } from '@/lib/format';
 import { tr } from '@/lib/i18n';
 import type { Category, Language, Transaction, TransactionType } from '@/types';
 import { EXPENSE_CATEGORIES, getCategoryDetails, getCategoryLabel, INCOME_CATEGORIES } from '@/lib/categories';
@@ -68,6 +68,8 @@ export function TransactionReviewModal({
       ...draft,
       type,
       category: nextCategories.includes(draft.category) ? draft.category : nextCategories[0],
+      // Only expense bills can be pending; income is always recorded as received.
+      is_paid: type === 'income' ? true : media?.transaction.is_paid ?? true,
     });
   };
 
@@ -183,6 +185,11 @@ export function TransactionReviewModal({
                 className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm text-slate-100 focus:border-emerald-500 focus:outline-none"
               />
             </div>
+            {draft.is_paid === false && draft.due_date && (
+              <p role="status" className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2.5 text-xs text-amber-300">
+                {tr('reviewUnpaidBill', language).replace('{date}', formatDate(draft.due_date, language))}
+              </p>
+            )}
           </div>
           {saveError && <p role="alert" className="text-sm text-rose-300">{saveError}</p>}
           <div className="flex gap-3">
@@ -190,7 +197,7 @@ export function TransactionReviewModal({
               type="button"
               onClick={() => void saveTransaction()}
               disabled={saving || !draft.title.trim() || !Number.isFinite(draft.amount) || draft.amount <= 0 || !draft.transaction_date}
-              className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-emerald-500 px-4 py-3 text-sm font-semibold text-slate-950 disabled:opacity-50"
+              className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-emerald-500 px-4 py-3 text-sm font-semibold text-ink disabled:opacity-50"
             >
               <Check size={16} />
               {saving ? (isUrdu ? 'محفوظ ہو رہا ہے...' : 'Saving...') : 'Confirm & Save'}

@@ -12,6 +12,10 @@ The PWA manifest and app icons are served from `public/manifest.json`, `public/i
 
 Supabase provides authentication and the Postgres backend used for application data, including transactions and push notification subscriptions. Profile and transaction data are cached in the browser for offline use. Receipt images are stored locally in IndexedDB.
 
+Row-level security scopes `transactions` and `push_subscriptions` to the signed-in user (`auth.uid()::text = user_id`); see `supabase/migrations/`.
+
+AI features (voice and receipt scanning) go through the `ai-proxy` edge function, which requires a signed-in user, caps payload sizes, and rate-limits each user via the `ai_usage` table. The OpenAI key lives only in the function's secrets (`supabase secrets set OPENAI_API_KEY=...`), never in a `VITE_` variable.
+
 Configure the required Supabase and VAPID values in the deployment environment. Do not commit secret keys or add them to client-exposed variables; only the Supabase URL, anon key, and VAPID public key belong in the client environment.
 
 ## Daily bill reminders

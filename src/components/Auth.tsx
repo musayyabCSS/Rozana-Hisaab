@@ -1,24 +1,47 @@
 import React, { useEffect, useState } from 'react';
-import { Eye, EyeOff, Languages } from 'lucide-react';
+import { Eye, EyeOff } from 'lucide-react';
+import { LanguageIcon } from '@/components/ui/LanguageIcon';
 import { Capacitor } from '@capacitor/core';
 import { supabase } from '@/lib/supabase';
 import { useLanguage } from '@/hooks/useLanguage';
 import { tr } from '@/lib/i18n';
 
+// A translation key for messages the app knows, or raw text from Supabase.
+type AuthMessage = { key: string } | { text: string };
+
 export function Auth({ initialError }: { initialError?: string | null }) {
   const { language, toggleLanguage, dir } = useLanguage();
   const translate = (key: string) => tr(key, language);
+  const messageText = (message: AuthMessage) => ('key' in message ? translate(message.key) : message.text);
   const [showResetForm, setShowResetForm] = useState(false);
   const [resetSent, setResetSent] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isSignUp, setIsSignUp] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  // Known messages are stored as translation keys so they follow the language toggle.
+  const [error, setError] = useState<AuthMessage | null>(null);
+  // Known failures get a translated message plus a one-tap way forward.
+  const [errorHint, setErrorHint] = useState<'invalid_credentials' | 'account_exists' | null>(null);
+  const [notice, setNotice] = useState<string | null>(null); // translation key
   const [loading, setLoading] = useState(false);
 
+  const switchMode = (signUp: boolean) => {
+    setIsSignUp(signUp);
+    setError(null);
+    setErrorHint(null);
+    setNotice(null);
+  };
+
+  const openResetForm = () => {
+    setShowResetForm(true);
+    setError(null);
+    setErrorHint(null);
+    setNotice(null);
+  };
+
   useEffect(() => {
-    if (initialError) setError(initialError);
+    if (initialError) setError({ text: initialError });
   }, [initialError]);
 
   const handlePasswordReset = async (e: React.FormEvent) => {
@@ -35,8 +58,8 @@ export function Auth({ initialError }: { initialError?: string | null }) {
     } catch (resetError) {
       setError(
         resetError instanceof Error
-          ? resetError.message
-          : translate('authResetError'),
+          ? { text: resetError.message }
+          : { key: 'authResetError' },
       );
     } finally {
       setLoading(false);
@@ -46,14 +69,38 @@ export function Auth({ initialError }: { initialError?: string | null }) {
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+    setErrorHint(null);
+    setNotice(null);
     setLoading(true);
 
-    const { error } = isSignUp
-      ? await supabase.auth.signUp({ email, password })
-      : await supabase.auth.signInWithPassword({ email, password });
+    try {
+      if (isSignUp) {
+        const { data, error } = await supabase.auth.signUp({ email, password });
+        if (error) {
+          setError({ text: error.message });
+        } else if (data.user && data.user.identities?.length === 0) {
+          // Supabase reports an already-registered email as a success with no identities.
+          setError({ key: 'authAccountExists' });
+          setErrorHint('account_exists');
+        } else if (!data.session) {
+          setNotice('authConfirmEmailSent');
+        }
+        return;
+      }
 
-    if (error) setError(error.message);
-    setLoading(false);
+      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      if (!error) return;
+      if (error.code === 'invalid_credentials' || error.message === 'Invalid login credentials') {
+        setError({ key: 'authInvalidCredentials' });
+        setErrorHint('invalid_credentials');
+      } else if (error.code === 'email_not_confirmed') {
+        setError({ key: 'authEmailNotConfirmed' });
+      } else {
+        setError({ text: error.message });
+      }
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleGoogleLogin = async () => {
@@ -73,7 +120,7 @@ export function Auth({ initialError }: { initialError?: string | null }) {
     });
 
     if (error) {
-      setError(error.message);
+      setError({ text: error.message });
       console.error('Error logging in with Google:', error.message);
     }
   };
@@ -85,7 +132,7 @@ export function Auth({ initialError }: { initialError?: string | null }) {
   ];
 
   return (
-    <div dir={dir} className="flex min-h-screen min-h-[100dvh] flex-col items-center justify-center gap-8 bg-slate-950 px-4 pt-[max(1rem,env(safe-area-inset-top))] pb-[max(1rem,env(safe-area-inset-bottom))] text-white">
+    <div dir={dir} className="flex min-h-screen min-h-[100dvh] flex-col items-center justify-center gap-8 bg-slate-950 px-4 pt-[max(1rem,env(safe-area-inset-top))] pb-[max(1rem,env(safe-area-inset-bottom))] text-slate-50">
       <header className="w-full max-w-xl space-y-4 text-center">
         <img
           src="/icon.svg"
@@ -118,7 +165,7 @@ export function Auth({ initialError }: { initialError?: string | null }) {
             aria-label={translate('authLanguageLabel')}
             className="inline-flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm font-medium text-slate-200 transition hover:border-emerald-500 hover:text-emerald-300"
           >
-            <Languages size={16} aria-hidden="true" />
+            <LanguageIcon size={18} />
             {translate('authLanguageSwitch')}
           </button>
         </div>
@@ -146,7 +193,7 @@ export function Auth({ initialError }: { initialError?: string | null }) {
             )}
             {error && (
               <div className="p-2 text-xs bg-red-500/10 border border-red-500/20 text-red-400 rounded-lg text-center">
-                {error}
+                {messageText(error)}
               </div>
             )}
             <form onSubmit={handlePasswordReset} className="space-y-3" dir={dir}>
@@ -155,13 +202,13 @@ export function Auth({ initialError }: { initialError?: string | null }) {
                 placeholder={translate('authEmail')}
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className={`w-full p-3 rounded-lg bg-slate-800 text-white border border-slate-700 focus:outline-none focus:border-emerald-500 text-sm ${dir === 'rtl' ? 'text-right' : 'text-left'}`}
+                className={`w-full p-3 rounded-lg bg-slate-800 text-slate-50 border border-slate-700 focus:outline-none focus:border-emerald-500 text-sm ${dir === 'rtl' ? 'text-right' : 'text-left'}`}
                 required
               />
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full py-3 bg-emerald-500 hover:bg-emerald-600 font-semibold rounded-lg transition text-slate-950 text-sm disabled:opacity-60"
+                className="w-full py-3 bg-emerald-500 hover:bg-emerald-600 font-semibold rounded-lg transition text-ink text-sm disabled:opacity-60"
               >
                 {loading ? translate('authSending') : translate('authSendResetLink')}
               </button>
@@ -173,23 +220,71 @@ export function Auth({ initialError }: { initialError?: string | null }) {
                 setResetSent(false);
                 setError(null);
               }}
-              className="w-full text-xs text-slate-400 hover:text-white underline text-center pt-2"
+              className="w-full text-xs text-slate-400 hover:text-slate-50 underline text-center pt-2"
             >
               {translate('authBackToLogin')}
             </button>
           </>
         ) : (
           <>
+        <div
+          role="tablist"
+          aria-label={translate('authModeLabel')}
+          className="grid grid-cols-2 gap-1 rounded-xl border border-slate-800 bg-slate-950/60 p-1"
+        >
+          {[false, true].map((signUpTab) => {
+            const selected = isSignUp === signUpTab;
+            return (
+              <button
+                key={signUpTab ? 'signup' : 'login'}
+                type="button"
+                role="tab"
+                aria-selected={selected}
+                onClick={() => switchMode(signUpTab)}
+                className={`rounded-lg py-2 text-sm font-semibold transition-colors ${
+                  selected
+                    ? 'bg-emerald-500 text-ink shadow-lg shadow-emerald-500/20'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                {translate(signUpTab ? 'authSignup' : 'authLogin')}
+              </button>
+            );
+          })}
+        </div>
+
+        {notice && (
+          <div role="status" className="p-3 text-sm bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 rounded-lg text-center">
+            {translate(notice)}
+          </div>
+        )}
+
         {error && (
-          <div className="p-2 text-xs bg-red-500/10 border border-red-500/20 text-red-400 rounded-lg text-center">
-            {error}
+          <div role="alert" className="p-2 text-xs bg-red-500/10 border border-red-500/20 text-red-400 rounded-lg text-center">
+            <p>{messageText(error)}</p>
+            {errorHint === 'invalid_credentials' && (
+              <div className="mt-2 flex flex-wrap items-center justify-center gap-x-3 gap-y-1 font-semibold">
+                <button type="button" onClick={() => switchMode(true)} className="text-emerald-400 underline">
+                  {translate('authNewHereSignUp')}
+                </button>
+                <span aria-hidden="true" className="text-slate-600">·</span>
+                <button type="button" onClick={openResetForm} className="text-emerald-400 underline">
+                  {translate('authResetInstead')}
+                </button>
+              </div>
+            )}
+            {errorHint === 'account_exists' && (
+              <button type="button" onClick={() => switchMode(false)} className="mt-2 font-semibold text-emerald-400 underline">
+                {translate('authLoginInstead')}
+              </button>
+            )}
           </div>
         )}
 
         <button
           type="button"
           onClick={handleGoogleLogin}
-          className="w-full py-3 px-4 flex items-center justify-center gap-3 bg-white text-slate-900 font-semibold rounded-lg hover:bg-slate-100 transition shadow text-sm"
+          className="w-full py-3 px-4 flex items-center justify-center gap-3 bg-white text-ink font-semibold rounded-lg hover:bg-white/90 transition shadow ring-1 ring-black/10 text-sm"
         >
           <svg className="w-5 h-5" viewBox="0 0 24 24">
             <path
@@ -224,7 +319,7 @@ export function Auth({ initialError }: { initialError?: string | null }) {
             placeholder={translate('authEmail')}
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            className={`w-full p-3 rounded-lg bg-slate-800 text-white border border-slate-700 focus:outline-none focus:border-emerald-500 text-sm ${dir === 'rtl' ? 'text-right' : 'text-left'}`}
+            className={`w-full p-3 rounded-lg bg-slate-800 text-slate-50 border border-slate-700 focus:outline-none focus:border-emerald-500 text-sm ${dir === 'rtl' ? 'text-right' : 'text-left'}`}
             required
           />
           <div className="relative flex items-center">
@@ -233,7 +328,7 @@ export function Auth({ initialError }: { initialError?: string | null }) {
               placeholder={translate('authPassword')}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className={`w-full p-3 ${dir === 'rtl' ? 'pl-11 text-right' : 'pr-11 text-left'} rounded-lg bg-slate-800 text-white border border-slate-700 focus:outline-none focus:border-emerald-500 text-sm`}
+              className={`w-full p-3 ${dir === 'rtl' ? 'pl-11 text-right' : 'pr-11 text-left'} rounded-lg bg-slate-800 text-slate-50 border border-slate-700 focus:outline-none focus:border-emerald-500 text-sm`}
               required
             />
             <button
@@ -241,7 +336,7 @@ export function Auth({ initialError }: { initialError?: string | null }) {
               tabIndex={-1}
               aria-label={translate(showPassword ? 'authHidePassword' : 'authShowPassword')}
               onClick={() => setShowPassword((visible) => !visible)}
-              className={`absolute ${dir === 'rtl' ? 'left-3' : 'right-3'} text-slate-400 hover:text-white transition-colors`}
+              className={`absolute ${dir === 'rtl' ? 'left-3' : 'right-3'} text-slate-400 hover:text-slate-50 transition-colors`}
             >
               {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
             </button>
@@ -250,10 +345,7 @@ export function Auth({ initialError }: { initialError?: string | null }) {
             <div className={dir === 'rtl' ? 'text-left' : 'text-right'}>
               <button
                 type="button"
-                onClick={() => {
-                  setShowResetForm(true);
-                  setError(null);
-                }}
+                onClick={openResetForm}
                 className="text-xs text-slate-400 hover:text-emerald-400 transition-colors"
               >
                 {translate('authForgotPassword')}
@@ -263,7 +355,7 @@ export function Auth({ initialError }: { initialError?: string | null }) {
           <button
             type="submit"
             disabled={loading}
-            className="w-full py-3 bg-emerald-500 hover:bg-emerald-600 font-semibold rounded-lg transition text-slate-950 text-sm"
+            className="w-full py-3 bg-emerald-500 hover:bg-emerald-600 font-semibold rounded-lg transition text-ink text-sm"
           >
             {loading
               ? translate('authProcessing')
@@ -272,29 +364,21 @@ export function Auth({ initialError }: { initialError?: string | null }) {
                 : translate('authLogin')}
           </button>
         </form>
-
-        <button
-          type="button"
-          onClick={() => setIsSignUp(!isSignUp)}
-          className="w-full text-xs text-slate-400 hover:text-white underline text-center pt-2"
-        >
-          {translate(isSignUp ? 'authAlreadyHaveAccount' : 'authNoAccount')}
-        </button>
           </>
         )}
       </div>
       <footer className="flex flex-wrap items-center justify-center gap-x-3 gap-y-2 text-xs text-slate-400">
-        <a href="/privacy" className="transition-colors hover:text-white">
+        <a href="/privacy" className="transition-colors hover:text-slate-50">
           {translate('authPrivacy')}
         </a>
         <span aria-hidden="true" className="text-slate-600">·</span>
-        <a href="/terms" className="transition-colors hover:text-white">
+        <a href="/terms" className="transition-colors hover:text-slate-50">
           {translate('authTerms')}
         </a>
         <span aria-hidden="true" className="text-slate-600">·</span>
         <a
           href="mailto:musayyab@chatsupportservice.com?subject=Rozana%20Hisaab%20Support"
-          className="transition-colors hover:text-white"
+          className="transition-colors hover:text-slate-50"
         >
           {translate('authContact')}
         </a>

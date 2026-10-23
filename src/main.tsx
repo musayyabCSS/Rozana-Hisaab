@@ -4,6 +4,7 @@ import { Capacitor } from '@capacitor/core';
 import { registerSW } from 'virtual:pwa-register';
 import App from './App.tsx';
 import './index.css';
+import './hooks/useTheme';
 
 if (Capacitor.isNativePlatform()) {
   if ('serviceWorker' in navigator) {

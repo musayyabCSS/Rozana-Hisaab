@@ -71,7 +71,7 @@ export function SetNewPasswordModal({ open, onSuccess }: SetNewPasswordModalProp
               autoComplete="new-password"
               value={password}
               onChange={(event) => setPassword(event.target.value)}
-              className="w-full rounded-lg border border-slate-700 bg-slate-800 p-3 pr-11 text-sm text-white focus:border-emerald-500 focus:outline-none"
+              className="w-full rounded-lg border border-slate-700 bg-slate-800 p-3 pr-11 text-sm text-slate-50 focus:border-emerald-500 focus:outline-none"
               minLength={6}
               required
             />
@@ -80,7 +80,7 @@ export function SetNewPasswordModal({ open, onSuccess }: SetNewPasswordModalProp
               tabIndex={-1}
               aria-label={showPassword ? 'Hide password' : 'Show password'}
               onClick={() => setShowPassword((visible) => !visible)}
-              className="absolute right-3 text-slate-400 transition-colors hover:text-white"
+              className="absolute right-3 text-slate-400 transition-colors hover:text-slate-50"
             >
               {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
             </button>
@@ -97,7 +97,7 @@ export function SetNewPasswordModal({ open, onSuccess }: SetNewPasswordModalProp
               autoComplete="new-password"
               value={confirmPassword}
               onChange={(event) => setConfirmPassword(event.target.value)}
-              className="w-full rounded-lg border border-slate-700 bg-slate-800 p-3 pr-11 text-sm text-white focus:border-emerald-500 focus:outline-none"
+              className="w-full rounded-lg border border-slate-700 bg-slate-800 p-3 pr-11 text-sm text-slate-50 focus:border-emerald-500 focus:outline-none"
               minLength={6}
               required
             />
@@ -106,7 +106,7 @@ export function SetNewPasswordModal({ open, onSuccess }: SetNewPasswordModalProp
               tabIndex={-1}
               aria-label={showConfirmPassword ? 'Hide password' : 'Show password'}
               onClick={() => setShowConfirmPassword((visible) => !visible)}
-              className="absolute right-3 text-slate-400 transition-colors hover:text-white"
+              className="absolute right-3 text-slate-400 transition-colors hover:text-slate-50"
             >
               {showConfirmPassword ? <EyeOff size={18} /> : <Eye size={18} />}
             </button>
@@ -115,7 +115,7 @@ export function SetNewPasswordModal({ open, onSuccess }: SetNewPasswordModalProp
         <button
           type="submit"
           disabled={loading}
-          className="w-full rounded-lg bg-emerald-500 py-3 text-sm font-semibold text-slate-950 transition hover:bg-emerald-600 disabled:opacity-60"
+          className="w-full rounded-lg bg-emerald-500 py-3 text-sm font-semibold text-ink transition hover:bg-emerald-600 disabled:opacity-60"
         >
           {loading ? 'Updating...' : 'Update Password'}
         </button>

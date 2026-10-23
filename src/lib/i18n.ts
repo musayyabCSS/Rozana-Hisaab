@@ -129,8 +129,26 @@ export const t: Dict = {
   authSendResetLink: { en: 'Send Reset Link', ur: 'ری سیٹ لنک بھیجیں' },
   authBackToLogin: { en: 'Back to Log In', ur: 'لاگ ان پر واپس جائیں' },
   authProcessing: { en: 'Processing...', ur: 'عمل جاری ہے...' },
-  authAlreadyHaveAccount: { en: 'Already have an account? Log In', ur: 'پہلے سے اکاؤنٹ ہے؟ لاگ ان کریں' },
-  authNoAccount: { en: "Don't have an account? Sign Up", ur: 'اکاؤنٹ نہیں ہے؟ سائن اپ کریں' },
+  authModeLabel: { en: 'Log in or sign up', ur: 'لاگ ان یا سائن اپ' },
+  authInvalidCredentials: {
+    en: 'Incorrect email or password, or no account exists with this email. If you joined with Google, use the Google button below.',
+    ur: 'ای میل یا پاس ورڈ درست نہیں، یا اس ای میل سے کوئی اکاؤنٹ موجود نہیں۔ اگر آپ نے گوگل سے اکاؤنٹ بنایا تھا تو نیچے گوگل کا بٹن استعمال کریں۔',
+  },
+  authNewHereSignUp: { en: 'New here? Sign up', ur: 'نئے ہیں؟ سائن اپ کریں' },
+  authResetInstead: { en: 'Reset password', ur: 'پاس ورڈ ری سیٹ کریں' },
+  authEmailNotConfirmed: {
+    en: 'Please confirm your email first. Check your inbox for the confirmation link.',
+    ur: 'براہ کرم پہلے اپنی ای میل کی تصدیق کریں۔ تصدیقی لنک کے لیے اپنا ان باکس دیکھیں۔',
+  },
+  authAccountExists: {
+    en: 'An account with this email already exists.',
+    ur: 'اس ای میل سے پہلے ہی ایک اکاؤنٹ موجود ہے۔',
+  },
+  authLoginInstead: { en: 'Log in instead', ur: 'اس کے بجائے لاگ ان کریں' },
+  authConfirmEmailSent: {
+    en: 'Account created. Check your email to confirm it, then log in.',
+    ur: 'اکاؤنٹ بن گیا۔ تصدیق کے لیے اپنی ای میل دیکھیں، پھر لاگ ان کریں۔',
+  },
   authShowPassword: { en: 'Show password', ur: 'پاس ورڈ دکھائیں' },
   authHidePassword: { en: 'Hide password', ur: 'پاس ورڈ چھپائیں' },
   authLanguageSwitch: { en: 'اردو', ur: 'English' },
@@ -183,6 +201,10 @@ export const t: Dict = {
     en: 'This recording is too large to process. You can discard it from this device.',
     ur: 'یہ ریکارڈنگ پراسیس کے لیے بہت بڑی ہے۔ آپ اسے اس ڈیوائس سے حذف کر سکتے ہیں۔',
   },
+  aiLimitReached: {
+    en: 'AI usage limit reached. Please try again later or add the entry manually.',
+    ur: 'AI کے استعمال کی حد پوری ہو گئی ہے۔ براہ کرم بعد میں کوشش کریں یا اندراج خود شامل کریں۔',
+  },
   mediaTooLargeReceipt: {
     en: 'This photo is too large to process. You can discard it from this device.',
     ur: 'یہ تصویر پراسیس کے لیے بہت بڑی ہے۔ آپ اسے اس ڈیوائس سے حذف کر سکتے ہیں۔',
@@ -196,6 +218,18 @@ export const t: Dict = {
     ur: 'AI سروس عارضی طور پر دستیاب نہیں۔ میڈیا پر دوبارہ کوشش کی جائے گی۔',
   },
   settingsTitle: { en: 'Settings', ur: 'ترتیبات' },
+  reviewUnpaidBill: {
+    en: 'Saved as an unpaid bill due {date}. You’ll get a reminder on the due date; tap “Mark Paid” once you pay it.',
+    ur: 'یہ {date} تک واجب الادا بل کے طور پر محفوظ ہوگا۔ آخری تاریخ پر یاد دہانی ملے گی؛ ادائیگی کے بعد “ادائیگی درج کریں” پر ٹیپ کریں۔',
+  },
+  themeTitle: { en: 'Appearance', ur: 'ظاہری شکل' },
+  themeHelp: {
+    en: 'System follows your phone’s light or dark mode.',
+    ur: 'سسٹم آپ کے فون کے لائٹ یا ڈارک موڈ کے مطابق چلتا ہے۔',
+  },
+  themeLight: { en: 'Light', ur: 'لائٹ' },
+  themeDark: { en: 'Dark', ur: 'ڈارک' },
+  themeSystem: { en: 'System', ur: 'سسٹم' },
   notificationTitle: { en: 'Daily Reminders / Push Notifications', ur: 'روزانہ یاد دہانیاں / پش اطلاعات' },
   notificationHelp: {
     en: 'Get daily reminders on Android and push alerts for bills due today on web.',

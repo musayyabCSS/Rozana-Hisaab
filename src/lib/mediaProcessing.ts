@@ -1,7 +1,8 @@
 import type { Category, NewTransaction, Transaction } from '@/types';
-import { EXPENSE_CATEGORIES } from '@/lib/categories';
+import { EXPENSE_CATEGORIES, INCOME_CATEGORIES } from '@/lib/categories';
 import { getLocalDateKey } from '@/lib/format';
-import { parseReceiptImage, parseVoice, transcribeAudioWithWhisper } from '@/lib/ai';
+import { AiRequestError, parseReceiptImage, parseVoice, transcribeAudioWithWhisper } from '@/lib/ai';
+import type { AiErrorKind } from '@/lib/aiClient';
 
 export interface MediaReviewDraft {
   id: string;
@@ -14,10 +15,15 @@ export class MediaProcessingError extends Error {
   constructor(
     message: string,
     readonly manualPrefill: Partial<NewTransaction>,
+    readonly kind?: AiErrorKind,
   ) {
     super(message);
     this.name = 'MediaProcessingError';
   }
+}
+
+function aiErrorKind(error: unknown): AiErrorKind | undefined {
+  return error instanceof AiRequestError ? error.kind : undefined;
 }
 
 function createTransactionId(): string {
@@ -81,6 +87,7 @@ export async function processVoiceBlob(blob: Blob): Promise<Transaction> {
         title: 'Voice transaction',
         source: 'voice',
       },
+      aiErrorKind(error),
     );
   }
   if (!transcript.trim()) {
@@ -105,6 +112,7 @@ export async function processVoiceBlob(blob: Blob): Promise<Transaction> {
     throw new MediaProcessingError(
       error instanceof Error ? error.message : 'Could not understand the voice note.',
       { title: transcript.trim().slice(0, 120), source: 'voice' },
+      aiErrorKind(error),
     );
   }
 }
@@ -117,17 +125,26 @@ export async function processReceiptBlob(blob: Blob): Promise<Transaction> {
     throw new MediaProcessingError(
       error instanceof Error ? error.message : 'Could not analyze the receipt.',
       { title: 'Scanned Receipt', source: 'scan', has_receipt: true },
+      aiErrorKind(error),
     );
   }
 
   const type = parsed.type === 'income' ? 'income' : 'expense';
   const category: Category = type === 'income'
-    ? 'freelance'
+    ? INCOME_CATEGORIES.find((candidate) => candidate === parsed.category) ?? 'freelance'
     : EXPENSE_CATEGORIES.find((candidate) => candidate === parsed.category) ?? 'bills';
   const transactionDate =
     [parsed.transaction_date, parsed.date, parsed.due_date].find(
       (date): date is string => typeof date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(date),
     ) ?? getLocalDateKey();
+  const dueDate =
+    typeof parsed.due_date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(parsed.due_date)
+      ? parsed.due_date
+      : null;
+  // A bill or statement that is still due is saved as unpaid, so it triggers a
+  // due-date reminder and stays out of expense totals until marked paid.
+  const isUnpaidBill =
+    type === 'expense' && dueDate !== null && dueDate >= getLocalDateKey() && parsed.is_paid !== true;
   const amount = typeof parsed.amount === 'number'
     ? parsed.amount
     : typeof parsed.amount === 'string'
@@ -140,10 +157,11 @@ export async function processReceiptBlob(blob: Blob): Promise<Transaction> {
     category,
     title: parsed.title || parsed.merchant || parsed.provider || parsed.vendor || 'Scanned Receipt',
     provider: parsed.provider || null,
-    due_date: parsed.due_date || null,
+    due_date: dueDate,
     units_consumed: parsed.units_consumed || null,
     transaction_date: transactionDate,
     source: 'scan',
     has_receipt: true,
+    is_paid: !isUnpaidBill,
   });
 }

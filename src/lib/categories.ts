@@ -1,4 +1,4 @@
-import { Briefcase, Car, Droplets, FileText, GraduationCap, HandCoins, Home, Laptop, Percent, Receipt, School, ShoppingCart, Stethoscope, Wallet, Wrench, Zap } from 'lucide-react';
+import { Briefcase, Building2, Car, Droplets, FileText, GraduationCap, HandCoins, Home, Laptop, Percent, Receipt, School, ShoppingCart, Stethoscope, UtensilsCrossed, Wallet, Wrench, Zap } from 'lucide-react';
 import type { Category, Language } from '@/types';
 
 interface CategoryMeta {
@@ -29,10 +29,12 @@ export const CATEGORIES: Record<Category, CategoryMeta> = {
   commission: { icon: Percent, emoji: '％', label: { en: 'Commission', ur: 'کمیشن' } },
   loan: { icon: HandCoins, emoji: '🤝', label: { en: 'Loan', ur: 'قرض' } },
   scholarship: { icon: GraduationCap, emoji: '🎓', label: { en: 'Scholarship', ur: 'وظیفہ' } },
+  office_funds: { icon: Building2, emoji: '🏢', label: { en: 'Office Funds', ur: 'دفتری فنڈز' } },
   transport: { icon: Car, emoji: '🚗', label: { en: 'Transport', ur: 'ٹرانسپورٹ' } },
   fuel: { icon: Droplets, emoji: '⛽', label: { en: 'Fuel / Petrol', ur: 'پیٹرول' } },
   bills: { icon: Zap, emoji: '⚡', label: { en: 'Bills / Utilities', ur: 'بلز / یوٹیلیٹیز' } },
   groceries: { icon: ShoppingCart, emoji: '🛒', label: { en: 'Grocery', ur: 'راشن' } },
+  food: { icon: UtensilsCrossed, emoji: '🍽️', label: { en: 'Food', ur: 'کھانا' } },
   medical: { icon: Stethoscope, emoji: '🏥', label: { en: 'Medical', ur: 'علاج' } },
   udhaar: { icon: Receipt, emoji: '🧾', label: { en: 'Loan Repayment', ur: 'قرض کی ادائیگی' } },
   rent: { icon: Home, emoji: '🏠', label: { en: 'Rent', ur: 'کرایہ' } },
@@ -41,8 +43,8 @@ export const CATEGORIES: Record<Category, CategoryMeta> = {
   misc_expense: { icon: FileText, emoji: '🧾', label: { en: 'Misc. Expense', ur: 'متفرق خرچ' } },
 };
 
-export const EXPENSE_CATEGORIES: Category[] = ['transport', 'fuel', 'bills', 'groceries', 'medical', 'udhaar', 'rent', 'school_fee', 'mechanic', 'misc_expense'];
-export const INCOME_CATEGORIES: Category[] = ['salary', 'business', 'freelance', 'rental_income', 'commission', 'loan', 'scholarship'];
+export const EXPENSE_CATEGORIES: Category[] = ['transport', 'fuel', 'bills', 'groceries', 'food', 'medical', 'udhaar', 'rent', 'school_fee', 'mechanic', 'misc_expense'];
+export const INCOME_CATEGORIES: Category[] = ['salary', 'business', 'freelance', 'rental_income', 'commission', 'loan', 'scholarship', 'office_funds'];
 
 export function getCategoryDetails(categoryName?: string | null): CategoryDetails | typeof DEFAULT_CATEGORY {
   const normalized = categoryName?.trim().toLowerCase();

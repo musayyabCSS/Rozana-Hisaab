@@ -1,0 +1,6 @@
+project_id = "iipkxcmrrutvmvztvwva"
+
+# User sessions are signed with ES256, which the gateway's built-in JWT check
+# rejects. ai-proxy verifies the caller itself via auth.getUser().
+[functions.ai-proxy]
+verify_jwt = false

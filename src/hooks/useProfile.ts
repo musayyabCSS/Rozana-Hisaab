@@ -10,6 +10,32 @@ export interface UserProfile {
 
 const CACHED_PROFILE_KEY = 'rozana_cached_profile';
 
+function isRemoteImageUrl(value: unknown): value is string {
+  return typeof value === 'string' && /^https?:\/\//i.test(value.trim());
+}
+
+// Older builds stored the custom photo as a data URL in user_metadata. That
+// metadata is embedded in every access token, so a ~100 KB photo made request
+// headers too large. Custom photos now stay on the device only.
+function hasEmbeddedAvatar(user: User): boolean {
+  const avatarUrl: unknown = user.user_metadata?.avatar_url;
+  return typeof avatarUrl === 'string' && avatarUrl.startsWith('data:');
+}
+
+async function removeEmbeddedAvatar(user: User): Promise<void> {
+  if (!hasEmbeddedAvatar(user)) return;
+  const picture: unknown = user.user_metadata?.picture;
+  const { error } = await supabase.auth.updateUser({
+    data: { avatar_url: isRemoteImageUrl(picture) ? picture : null },
+  });
+  if (error) {
+    console.warn('Could not remove the embedded profile photo from the account:', error);
+    return;
+  }
+  // Issue a new, smaller access token without the embedded photo.
+  await supabase.auth.refreshSession();
+}
+
 function extractProfile(user: User): UserProfile {
   const metadata = user.user_metadata ?? {};
   const name =
@@ -17,12 +43,8 @@ function extractProfile(user: User): UserProfile {
       (value): value is string => typeof value === 'string' && value.trim().length > 0,
     ) ?? 'User';
 
-  const avatar =
-    (typeof metadata.avatar_url === 'string' && metadata.avatar_url.trim().length > 0)
-      ? metadata.avatar_url
-      : (typeof metadata.picture === 'string' && metadata.picture.trim().length > 0)
-        ? metadata.picture
-        : null;
+  // Google sign-in provides the photo as `avatar_url` and `picture`.
+  const avatar = [metadata.avatar_url, metadata.picture].find(isRemoteImageUrl) ?? null;
 
   return { name, avatar };
 }
@@ -65,6 +87,13 @@ export function useProfile(activeUserId?: string) {
     if (!navigator.onLine) return;
 
     try {
+      // Check the locally stored session first: an oversized token can make
+      // the getUser() request below fail before the cleanup could run.
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.user && (!activeUserId || session.user.id === activeUserId)) {
+        await removeEmbeddedAvatar(session.user);
+      }
+
       const { data: { user }, error } = await supabase.auth.getUser();
       if (error || !user) return;
       if (activeUserId && user.id !== activeUserId) return;
@@ -187,16 +216,9 @@ export function useProfile(activeUserId?: string) {
     if (!writeCachedProfile(user.id, updated)) {
       throw new Error('Could not persist the profile photo on this device.');
     }
+    // Kept on this device only; see removeEmbeddedAvatar for why it is not
+    // written to user_metadata.
     setProfile(updated);
-
-    if (typeof navigator !== 'undefined' && navigator.onLine) {
-      const { error: updateError } = await supabase.auth.updateUser({
-        data: { avatar_url: avatarDataUrl },
-      });
-      if (updateError) {
-        console.warn('Profile photo is saved locally but could not sync to the account:', updateError);
-      }
-    }
 
     return avatarDataUrl;
   }, [profile]);

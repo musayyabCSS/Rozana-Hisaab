@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react';
-import { Languages, Camera, FileUp, LogOut, Settings } from 'lucide-react';
+import { Camera, FileUp, LogOut, Settings } from 'lucide-react';
+import { LanguageIcon } from '@/components/ui/LanguageIcon';
 import type { Language } from '@/types';
 import { tr } from '@/lib/i18n';
 import type { UserProfile } from '@/hooks/useProfile';
@@ -41,10 +42,13 @@ export function Header({
   const [avatarError, setAvatarError] = useState<string | null>(null);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const displayName = profile?.name ?? tr('userName', language);
-  const avatar =
+  const [failedAvatar, setFailedAvatar] = useState<string | null>(null);
+  const preferredAvatar =
     profile?.avatar ??
     (typeof userMetadata?.avatar_url === 'string' ? userMetadata.avatar_url : null) ??
     (typeof userMetadata?.picture === 'string' ? userMetadata.picture : null);
+  // Show initials instead of a broken image if the photo cannot be loaded.
+  const avatar = preferredAvatar === failedAvatar ? null : preferredAvatar;
   const initials = profile ? getInitials(profile.name, language) : language === 'ur' ? 'م' : 'MH';
 
   const handlePhotoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -87,7 +91,14 @@ export function Header({
           >
             {avatar ? (
               <div className="w-11 h-11 rounded-full overflow-hidden border-2 border-slate-800 shadow-lg shadow-emerald-500/20">
-                <img src={avatar} alt={displayName} className="w-full h-full object-cover" />
+                <img
+                  src={avatar}
+                  alt={displayName}
+                  // Google profile photos can refuse requests that carry a referrer.
+                  referrerPolicy="no-referrer"
+                  onError={() => setFailedAvatar(avatar)}
+                  className="w-full h-full object-cover"
+                />
               </div>
             ) : (
               <div className="w-11 h-11 rounded-full bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center text-white font-bold text-sm shadow-lg shadow-emerald-500/20 group-hover:ring-2 group-hover:ring-emerald-400/50 transition-all">
@@ -95,7 +106,7 @@ export function Header({
               </div>
             )}
             <div className="absolute -bottom-0.5 -right-0.5 w-4 h-4 rounded-full bg-slate-800 flex items-center justify-center border-2 border-slate-950 group-hover:bg-emerald-500 transition-colors">
-              <Camera size={9} className="text-slate-400 group-hover:text-white transition-colors" />
+              <Camera size={9} className="text-slate-400 group-hover:text-slate-50 transition-colors" />
             </div>
           </button>
           <div className={`min-w-0 ${dir === 'rtl' ? 'text-right' : 'text-left'}`}>
@@ -104,7 +115,7 @@ export function Header({
               <img
                 src="/icon.svg"
                 alt="Rozana Hisaab"
-                className="mr-2.5 h-9 w-9 rounded-xl"
+                className="me-2.5 h-9 w-9 rounded-xl"
               />
               {tr('appName', language)}
             </h1>
@@ -118,8 +129,8 @@ export function Header({
             className="flex items-center justify-center h-9 w-9 sm:w-auto sm:px-3 sm:py-2 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 transition-all active:scale-95 text-emerald-400"
             aria-label={tr('bankTitle', language)}
           >
-            <FileUp size={16} />
-            <span className="text-xs font-semibold hidden sm:inline sm:ml-1.5">{tr('importBank', language)}</span>
+            <FileUp size={18} />
+            <span className="text-xs font-semibold hidden sm:inline sm:ms-1.5">{tr('importBank', language)}</span>
           </button>
 
           {/* Language Toggle */}
@@ -128,8 +139,8 @@ export function Header({
             className="flex items-center justify-center h-9 w-9 sm:w-auto sm:px-3 sm:py-2 rounded-xl bg-slate-800/80 hover:bg-slate-700 border border-slate-700 transition-all active:scale-95 text-slate-300 hover:text-slate-100"
             aria-label="Toggle language"
           >
-            <Languages size={16} className="text-emerald-400" />
-            <span className="text-xs font-semibold hidden sm:inline sm:ml-1.5">
+            <LanguageIcon size={18} className="text-emerald-400" />
+            <span className="text-xs font-semibold hidden sm:inline sm:ms-1.5">
               {language === 'en' ? 'EN' : 'اردو'}
             </span>
           </button>
@@ -141,7 +152,7 @@ export function Header({
             aria-label={tr('settingsTitle', language)}
             title={tr('settingsTitle', language)}
           >
-            <Settings size={16} />
+            <Settings size={18} />
           </button>
 
           {/* Logout */}
@@ -152,7 +163,7 @@ export function Header({
             aria-label={language === 'ur' ? 'لاگ آؤٹ' : 'Log Out'}
             title={language === 'ur' ? 'لاگ آؤٹ' : 'Log Out'}
           >
-            <LogOut size={16} />
+            <LogOut size={18} />
           </button>
         </div>
       </div>

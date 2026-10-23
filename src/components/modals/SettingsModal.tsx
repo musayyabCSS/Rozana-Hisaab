@@ -1,8 +1,16 @@
 import { useState } from 'react';
+import { Moon, Sun, SunMoon } from 'lucide-react';
 import { Modal } from '@/components/ui/Modal';
 import { tr } from '@/lib/i18n';
 import type { Language } from '@/types';
 import { useNotifications } from '@/hooks/useNotifications';
+import { useTheme, type ThemePreference } from '@/hooks/useTheme';
+
+const THEME_OPTIONS: { key: ThemePreference; labelKey: string; icon: typeof Sun }[] = [
+  { key: 'light', labelKey: 'themeLight', icon: Sun },
+  { key: 'dark', labelKey: 'themeDark', icon: Moon },
+  { key: 'system', labelKey: 'themeSystem', icon: SunMoon },
+];
 
 interface SettingsModalProps {
   open: boolean;
@@ -30,6 +38,7 @@ export function SettingsModal({
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState(false);
   const notifications = useNotifications(userId, language);
+  const theme = useTheme();
 
   const deleteItems = async (action: DeleteAction) => {
     setDeleting(true);
@@ -107,7 +116,37 @@ export function SettingsModal({
       dir={dir}
     >
       <div className="space-y-5 text-sm">
-        <div className="space-y-3 text-slate-300">
+        <section className="space-y-2">
+          <h3 className="font-semibold text-slate-100">{tr('themeTitle', language)}</h3>
+          <div
+            role="radiogroup"
+            aria-label={tr('themeTitle', language)}
+            className="grid grid-cols-3 gap-1 rounded-xl border border-slate-800 bg-slate-950/60 p-1"
+          >
+            {THEME_OPTIONS.map(({ key, labelKey, icon: Icon }) => {
+              const selected = theme.preference === key;
+              return (
+                <button
+                  key={key}
+                  type="button"
+                  role="radio"
+                  aria-checked={selected}
+                  onClick={() => theme.setPreference(key)}
+                  className={`flex items-center justify-center gap-1.5 rounded-lg px-2 py-2 text-xs font-semibold transition-colors ${
+                    selected
+                      ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/20'
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  <Icon size={14} />
+                  {tr(labelKey, language)}
+                </button>
+              );
+            })}
+          </div>
+          <p className="text-xs text-slate-500">{tr('themeHelp', language)}</p>
+        </section>
+        <div className="space-y-3 border-t border-slate-800 pt-4 text-slate-300">
           <p>{tr('privacyDeviceTransactions', language)}</p>
           <p>{tr('privacyMediaProcessing', language)}</p>
           <p>{tr('privacyDeleteSettings', language)}</p>
@@ -131,7 +170,7 @@ export function SettingsModal({
             }`}
           >
             <span
-              className={`absolute top-1 h-4 w-4 rounded-full bg-white transition-transform ${
+              className={`absolute left-0 top-1 h-4 w-4 rounded-full bg-white transition-transform ${
                 notifications.enabled ? 'translate-x-6' : 'translate-x-1'
               }`}
             />

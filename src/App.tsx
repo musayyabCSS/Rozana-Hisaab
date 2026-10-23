@@ -433,10 +433,11 @@ function App() {
   // --- EXISTING CALLBACKS ---
   const handleOnboardingComplete = useCallback(
     async (p: { name: string; avatarFile: File | null }) => {
-      const avatar = p.avatarFile ? await uploadAvatar(p.avatarFile) : null;
+      // Without a chosen photo, keep the existing one (e.g. from Google sign-in).
+      const avatar = p.avatarFile ? await uploadAvatar(p.avatarFile) : profile?.avatar ?? null;
       await saveProfile({ name: p.name, avatar });
     },
-    [saveProfile, uploadAvatar],
+    [profile?.avatar, saveProfile, uploadAvatar],
   );
 
   const handleSaveTransaction = useCallback(
@@ -521,7 +522,7 @@ function App() {
 
   if (loadingProfile) {
     return (
-      <div className="min-h-[100dvh] bg-[#0b0f19] pb-[env(safe-area-inset-bottom,0px)] text-slate-100 flex items-center justify-center animate-pulse">
+      <div className="min-h-[100dvh] bg-canvas pb-[env(safe-area-inset-bottom,0px)] text-slate-100 flex items-center justify-center animate-pulse">
         Loading Rozana Hisaab...
       </div>
     );
@@ -555,7 +556,7 @@ function App() {
   // --- MAIN DASHBOARD ---
   return (
     <div
-      className="min-h-[100dvh] bg-[#0b0f19] text-slate-100 pb-[env(safe-area-inset-bottom,0px)] animate-[fadeIn_0.5s_ease-out]"
+      className="min-h-[100dvh] bg-canvas text-slate-100 pb-[env(safe-area-inset-bottom,0px)] animate-[fadeIn_0.5s_ease-out]"
       dir={dir}
     >
       {passwordUpdatedNotice && (
@@ -762,7 +763,7 @@ function App() {
                 setManualDraft(null);
                 setActiveModal('add');
               }}
-              className="flex-1 rounded-xl bg-emerald-500 px-4 py-3 text-sm font-semibold text-slate-950"
+              className="flex-1 rounded-xl bg-emerald-500 px-4 py-3 text-sm font-semibold text-ink"
             >
               Add Manually
             </button>

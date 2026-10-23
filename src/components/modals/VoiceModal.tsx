@@ -89,9 +89,11 @@ export function VoiceModal({
       if (processError instanceof MediaProcessingError) {
         manualPrefillRef.current = processError.manualPrefill;
       }
-      setError(language === 'ur'
-        ? 'کنکشن ناکام ہو گیا۔ براہ کرم اپنا انٹرنیٹ کنکشن چیک کریں۔'
-        : 'Connection failed. Please check your internet connection.');
+      setError(processError instanceof MediaProcessingError && processError.kind === 'limit'
+        ? tr('aiLimitReached', language)
+        : language === 'ur'
+          ? 'کنکشن ناکام ہو گیا۔ براہ کرم اپنا انٹرنیٹ کنکشن چیک کریں۔'
+          : 'Connection failed. Please check your internet connection.');
     } finally {
       if (progressTimerRef.current !== null) window.clearInterval(progressTimerRef.current);
       progressTimerRef.current = null;
@@ -305,7 +307,7 @@ export function VoiceModal({
         )}
         {error && capturedBlobRef.current && (
           <div className="mt-4 flex w-full max-w-xs gap-2">
-            <button type="button" onClick={retryProcessing} className="flex-1 rounded-xl bg-emerald-500 px-3 py-2.5 text-sm font-semibold text-slate-950">
+            <button type="button" onClick={retryProcessing} className="flex-1 rounded-xl bg-emerald-500 px-3 py-2.5 text-sm font-semibold text-ink">
               🔄 {language === 'ur' ? 'دوبارہ کوشش کریں' : 'Retry'}
             </button>
             <button type="button" onClick={switchToManual} className="flex-1 rounded-xl border border-slate-700 px-3 py-2.5 text-sm text-slate-200">

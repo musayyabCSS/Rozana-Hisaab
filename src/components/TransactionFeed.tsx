@@ -157,25 +157,25 @@ export function TransactionFeed({
     <div
       className={
         showAll
-          ? 'fixed inset-0 z-40 flex h-[100dvh] flex-col overflow-hidden bg-[#0a0f1d] px-0 pt-[env(safe-area-inset-top,0px)]'
+          ? 'fixed inset-0 z-40 flex h-[100dvh] flex-col overflow-hidden bg-canvas px-0 pt-[env(safe-area-inset-top,0px)]'
           : 'rounded-3xl bg-slate-900 border border-slate-800 p-4'
       }
     >
       <div
         className={`mx-auto ${
           showAll
-            ? 'flex min-h-0 w-full max-w-3xl flex-1 flex-col overflow-hidden bg-[#0a0f1d] sm:border-x sm:border-white/5'
+            ? 'flex min-h-0 w-full max-w-3xl flex-1 flex-col overflow-hidden bg-canvas sm:border-x sm:border-slate-800/50'
             : ''
         }`}
       >
-      <div className={`${showAll ? 'sticky top-0 z-20 shrink-0 border-b border-white/5 bg-[#0a0f1d]/95 px-4 pb-2 pt-3 backdrop-blur-md sm:px-6' : ''}`}>
+      <div className={`${showAll ? 'sticky top-0 z-20 shrink-0 border-b border-slate-800/50 bg-canvas/95 px-4 pb-2 pt-3 backdrop-blur-md sm:px-6' : ''}`}>
       <div className={`flex items-center justify-between mb-3 ${dir === 'rtl' ? 'flex-row-reverse' : ''}`}>
         <div className="flex items-center gap-2">
           {showAll && (
             <button
               type="button"
               onClick={() => onShowAllChange(false)}
-              className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800"
+              className="p-1.5 rounded-lg text-slate-400 hover:text-slate-50 hover:bg-slate-800"
               aria-label={language === 'ur' ? 'واپس جائیں' : 'Back to dashboard'}
             >
               <ArrowLeft size={18} />
@@ -360,10 +360,10 @@ export function TransactionFeed({
                               <Check size={13} />
                               {isIncome
                                 ? language === 'ur'
-                                  ? 'وصول شدہ'
+                                  ? 'وصولی درج کریں'
                                   : 'Mark Received'
                                 : language === 'ur'
-                                  ? 'ادا کریں'
+                                  ? 'ادائیگی درج کریں'
                                   : 'Mark Paid'}
                             </button>
                           )}
@@ -420,7 +420,7 @@ export function TransactionFeed({
             <button
               type="button"
               onClick={() => setReceiptPreview(null)}
-              className="absolute -top-3 -right-3 z-10 rounded-full bg-slate-800 p-2 text-white hover:bg-slate-700"
+              className="absolute -top-3 -right-3 z-10 rounded-full bg-slate-800 p-2 text-slate-50 hover:bg-slate-700"
               aria-label={language === 'ur' ? 'بند کریں' : 'Close receipt preview'}
             >
               <X size={20} />
@@ -448,7 +448,7 @@ export function TransactionFeed({
           <button
             type="button"
             onClick={() => setReceiptUnavailable(false)}
-            className="w-full rounded-xl bg-emerald-500 px-4 py-3 text-sm font-semibold text-slate-950"
+            className="w-full rounded-xl bg-emerald-500 px-4 py-3 text-sm font-semibold text-ink"
           >
             {language === 'ur' ? 'بند کریں' : 'Dismiss'}
           </button>
@@ -522,7 +522,7 @@ export function TransactionFeed({
               type="button"
               onClick={() => void confirmMarkPaid()}
               disabled={isMarkingPaid || !paymentDate}
-              className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-amber-400 to-yellow-500 text-slate-950 font-bold text-sm disabled:opacity-50"
+              className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-amber-400 to-yellow-500 text-ink font-bold text-sm disabled:opacity-50"
             >
               {isMarkingPaid
                 ? language === 'ur'
@@ -530,10 +530,10 @@ export function TransactionFeed({
                   : 'Updating...'
                 : paymentTransaction.type === 'income'
                   ? language === 'ur'
-                    ? 'وصولی کی تصدیق کریں'
+                    ? 'وصولی درج کریں'
                     : 'Confirm Received'
                   : language === 'ur'
-                    ? 'ادا شدہ نشان زد کریں'
+                    ? 'ادائیگی درج کریں'
                     : 'Confirm Mark Paid'}
             </button>
           </div>

@@ -22,3 +22,6 @@ dist-ssr
 *.sw?
 .env
 .bolt
+
+# Supabase CLI cache
+supabase/.temp/

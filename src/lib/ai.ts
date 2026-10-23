@@ -15,6 +15,7 @@ export interface ScannedReceipt {
   date?: string;
   transaction_date?: string;
   due_date?: string;
+  is_paid?: boolean;
   units_consumed?: string;
   category?: string;
   notes?: string;
@@ -105,5 +106,14 @@ export async function parseReceiptImage(base64Image: string): Promise<ScannedRec
     throw new Error('No receipt data returned by the AI service');
   }
 
-  return JSON.parse(rawContent) as ScannedReceipt;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(rawContent);
+  } catch {
+    throw new AiRequestError('The AI service returned unreadable receipt data.', 'invalid');
+  }
+  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+    throw new AiRequestError('The AI service returned unreadable receipt data.', 'invalid');
+  }
+  return parsed as ScannedReceipt;
 }

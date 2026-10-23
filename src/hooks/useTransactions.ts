@@ -126,9 +126,14 @@ export function useTransactions(activeUserId?: string) {
               .delete()
               .eq('user_id', activeUserId);
             if (error) throw error;
-            setTransactions(() => {
-              saveTransactionCache(activeUserId, []);
-              return [];
+            // Keep items created after the delete-all; their upserts are still queued.
+            const queuedUpsertIds = new Set(
+              pending.filter((item) => item.operation === 'upsert').map((item) => item.id),
+            );
+            setTransactions((current) => {
+              const next = current.filter((item) => queuedUpsertIds.has(item.id));
+              saveTransactionCache(activeUserId, next);
+              return next;
             });
           } else if (operation.operation === 'delete') {
             const { error } = await supabase

@@ -4,7 +4,7 @@ import * as XLSX from 'xlsx';
 import { Modal } from '@/components/ui/Modal';
 import { getLocalDateKey } from '@/lib/format';
 import type { Category, Language, NewTransaction, PaymentMethod } from '@/types';
-import { CATEGORIES, getCategoryLabel } from '@/lib/categories';
+import { CATEGORIES, EXPENSE_CATEGORIES, INCOME_CATEGORIES, getCategoryLabel } from '@/lib/categories';
 import { tr } from '@/lib/i18n';
 
 interface BankStatementModalProps {
@@ -27,6 +27,8 @@ interface ParsedLine {
 }
 
 const CATEGORY_RULES: { keywords: string[]; category: Category }[] = [
+  // Before salary, whose 'pay' keyword would otherwise match "office payment".
+  { keywords: ['office fund', 'petty cash', 'imprest', 'office expense advance'], category: 'office_funds' },
   { keywords: ['salary', 'payroll', 'wage', 'pay'], category: 'salary' },
   { keywords: ['rent received', 'rental income'], category: 'rental_income' },
   { keywords: ['commission'], category: 'commission' },
@@ -39,6 +41,7 @@ const CATEGORY_RULES: { keywords: string[]; category: Category }[] = [
   { keywords: ['fuel', 'petrol', 'diesel', 'pso', 'shell', 'caltex'], category: 'fuel' },
   { keywords: ['bill', 'electric', 'lesco', 'k-electric', 'gas', 'water', 'internet', 'ptcl', 'wifi'], category: 'bills' },
   { keywords: ['grocery', 'groceries', 'rashan', 'market', 'store', 'carrefour', 'naheed', 'imtiaz'], category: 'groceries' },
+  { keywords: ['food', 'foodpanda', 'restaurant', 'cafe', 'dhaba', 'kfc', 'mcdonald', 'pizza', 'burger', 'bakery'], category: 'food' },
   { keywords: ['medical', 'doctor', 'hospital', 'pharmacy', 'clinic', 'medicine', 'lab'], category: 'medical' },
   { keywords: ['business', 'sale', 'sales', 'profit', 'revenue'], category: 'business' },
   { keywords: ['freelance', 'project', 'client', 'upwork', 'fiverr'], category: 'freelance' },
@@ -52,7 +55,12 @@ for (const [key, meta] of Object.entries(CATEGORIES)) {
 
 function guessCategory(title: string, type: 'income' | 'expense'): Category {
   const lower = title.toLowerCase();
-  const matched = CATEGORY_RULES.find((rule) => rule.keywords.some((keyword) => lower.includes(keyword)))?.category;
+  // Only accept categories matching the line's direction, so e.g. an outgoing
+  // "petty cash" debit isn't tagged with the Office Funds income category.
+  const allowed = type === 'income' ? INCOME_CATEGORIES : EXPENSE_CATEGORIES;
+  const matched = CATEGORY_RULES.find((rule) =>
+    allowed.includes(rule.category) && rule.keywords.some((keyword) => lower.includes(keyword)),
+  )?.category;
   if (matched) return matched;
   return type === 'income' ? 'business' : 'misc_expense';
 }

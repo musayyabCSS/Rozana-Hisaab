@@ -43,11 +43,66 @@
 }
 
 @layer base {
+  /* Dark theme: Tailwind's default values, so dark mode is unchanged. */
+  :root {
+    color-scheme: dark;
+    --slate-50: 248 250 252;
+    --slate-100: 241 245 249;
+    --slate-200: 226 232 240;
+    --slate-300: 203 213 225;
+    --slate-400: 148 163 184;
+    --slate-500: 100 116 139;
+    --slate-600: 71 85 105;
+    --slate-700: 51 65 85;
+    --slate-800: 30 41 59;
+    --slate-900: 15 23 42;
+    --slate-950: 2 6 23;
+    --emerald-200: 167 243 208;
+    --emerald-300: 110 231 183;
+    --emerald-400: 52 211 153;
+    --rose-300: 253 164 175;
+    --rose-400: 251 113 133;
+    --red-300: 252 165 165;
+    --red-400: 248 113 113;
+    --amber-300: 252 211 77;
+    --amber-400: 251 191 36;
+    --sky-400: 56 189 248;
+    --canvas: 11 15 25;
+  }
+
+  /* Light theme: the slate scale is mirrored (950 = page, 900 = cards,
+     100 = primary text) and light accents darken for contrast on white. */
+  :root[data-theme='light'] {
+    color-scheme: light;
+    --slate-50: 2 6 23;
+    --slate-100: 15 23 42;
+    --slate-200: 30 41 59;
+    --slate-300: 51 65 85;
+    --slate-400: 71 85 105;
+    --slate-500: 100 116 139;
+    --slate-600: 148 163 184;
+    --slate-700: 203 213 225;
+    --slate-800: 226 232 240;
+    --slate-900: 255 255 255;
+    --slate-950: 241 245 249;
+    --emerald-200: 6 95 70;
+    --emerald-300: 4 120 87;
+    --emerald-400: 5 150 105;
+    --rose-300: 190 18 60;
+    --rose-400: 225 29 72;
+    --red-300: 185 28 28;
+    --red-400: 220 38 38;
+    --amber-300: 180 83 9;
+    --amber-400: 217 119 6;
+    --sky-400: 2 132 199;
+    --canvas: 241 245 249;
+  }
+
   html,
   body,
   #root {
     min-height: 100%;
-    background-color: #020617;
+    background-color: rgb(var(--slate-950));
   }
 
   html {
