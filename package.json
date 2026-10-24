@@ -1,7 +1,7 @@
 {
   "name": "rozana-hisaab",
   "private": true,
-  "version": "1.0.1",
+  "version": "1.0.3",
   "description": "Daily expense and bill management PWA for Pakistan",
   "type": "module",
   "scripts": {

@@ -58,6 +58,9 @@ function toSupabasePayload(transaction: Transaction, userId: string) {
       ? { has_receipt: transaction.has_receipt }
       : {}),
     ...(transaction.is_paid !== undefined ? { is_paid: transaction.is_paid } : {}),
+    // Only sent when set, so older cached transactions sync unchanged.
+    ...(transaction.consumer_number ? { consumer_number: transaction.consumer_number } : {}),
+    ...(transaction.issue_date ? { issue_date: transaction.issue_date } : {}),
   };
 }
 
@@ -268,6 +271,8 @@ export function useTransactions(activeUserId?: string) {
         created_at: txn.created_at ?? new Date().toISOString(),
         ...(txn.has_receipt !== undefined ? { has_receipt: txn.has_receipt } : {}),
         ...(txn.is_paid !== undefined ? { is_paid: txn.is_paid } : {}),
+        ...(txn.consumer_number ? { consumer_number: txn.consumer_number } : {}),
+        ...(txn.issue_date ? { issue_date: txn.issue_date } : {}),
         is_synced: false,
       };
 

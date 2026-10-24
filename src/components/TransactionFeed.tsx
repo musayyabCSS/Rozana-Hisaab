@@ -7,6 +7,7 @@ import { formatDate, formatPKR, getLocalDateKey, getRelativeDate, isFutureDate }
 import { filterTransactions } from '@/lib/format';
 import { getReceiptImage } from '@/lib/receiptStorage';
 import { Modal } from '@/components/ui/Modal';
+import { DateInput } from '@/components/ui/DateInput';
 
 interface TransactionFeedProps {
   transactions: Transaction[];
@@ -275,7 +276,7 @@ export function TransactionFeed({
                   ? tr('today', language)
                   : group.date === yesterdayKey
                     ? tr('yesterday', language)
-                    : formatDate(group.date, language)}
+                    : formatDate(group.date)}
               </h4>
               <div className="space-y-2">
                 {group.transactions.map((txn) => {
@@ -503,14 +504,12 @@ export function TransactionFeed({
               <label htmlFor="payment-confirm-date" className="text-slate-400 text-xs block mb-1.5">
                 {language === 'ur' ? 'ادائیگی کی تاریخ' : 'Payment Date'}
               </label>
-              <input
+              <DateInput
                 id="payment-confirm-date"
-                type="date"
                 value={paymentDate}
                 max={getLocalDateKey()}
-                onChange={(event) => setPaymentDate(event.target.value)}
+                onChange={setPaymentDate}
                 className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2.5 text-slate-100 text-sm focus:outline-none focus:border-amber-500"
-                required
               />
             </div>
             {paymentError && (

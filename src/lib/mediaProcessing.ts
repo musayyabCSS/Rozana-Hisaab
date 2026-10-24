@@ -3,6 +3,7 @@ import { EXPENSE_CATEGORIES, INCOME_CATEGORIES } from '@/lib/categories';
 import { getLocalDateKey } from '@/lib/format';
 import { AiRequestError, parseReceiptImage, parseVoice, transcribeAudioWithWhisper } from '@/lib/ai';
 import type { AiErrorKind } from '@/lib/aiClient';
+import { normalizeConsumerNumber, normalizeIntervalMonths } from '@/lib/billConnections';
 
 export interface MediaReviewDraft {
   id: string;
@@ -54,6 +55,8 @@ function makeTransaction(type: MediaReviewDraft['type'], draft: NewTransaction):
     created_at: now.toISOString(),
     ...(draft.has_receipt !== undefined ? { has_receipt: draft.has_receipt } : {}),
     ...(draft.is_paid !== undefined ? { is_paid: draft.is_paid } : {}),
+    ...(draft.consumer_number ? { consumer_number: draft.consumer_number } : {}),
+    ...(draft.issue_date ? { issue_date: draft.issue_date } : {}),
     is_synced: false,
   };
 }
@@ -133,14 +136,16 @@ export async function processReceiptBlob(blob: Blob): Promise<Transaction> {
   const category: Category = type === 'income'
     ? INCOME_CATEGORIES.find((candidate) => candidate === parsed.category) ?? 'freelance'
     : EXPENSE_CATEGORIES.find((candidate) => candidate === parsed.category) ?? 'bills';
-  const transactionDate =
-    [parsed.transaction_date, parsed.date, parsed.due_date].find(
-      (date): date is string => typeof date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(date),
-    ) ?? getLocalDateKey();
   const dueDate =
     typeof parsed.due_date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(parsed.due_date)
       ? parsed.due_date
       : null;
+  // Bills and statements are dated by when they are due, not when they were
+  // issued; other receipts keep their printed date.
+  const transactionDate =
+    [dueDate, parsed.transaction_date, parsed.date].find(
+      (date): date is string => typeof date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(date),
+    ) ?? getLocalDateKey();
   // A bill or statement that is still due is saved as unpaid, so it triggers a
   // due-date reminder and stays out of expense totals until marked paid.
   const isUnpaidBill =
@@ -150,8 +155,13 @@ export async function processReceiptBlob(blob: Blob): Promise<Transaction> {
     : typeof parsed.amount === 'string'
       ? Number(parsed.amount.replace(/,/g, ''))
       : 0;
+  const issueDate =
+    typeof parsed.issue_date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(parsed.issue_date)
+      ? parsed.issue_date
+      : null;
+  const consumerNumber = normalizeConsumerNumber(parsed.consumer_number);
 
-  return makeTransaction('receipt', {
+  const transaction = makeTransaction('receipt', {
     type,
     amount: Number.isFinite(amount) ? amount : 0,
     category,
@@ -163,5 +173,10 @@ export async function processReceiptBlob(blob: Blob): Promise<Transaction> {
     source: 'scan',
     has_receipt: true,
     is_paid: !isUnpaidBill,
+    consumer_number: consumerNumber,
+    issue_date: issueDate,
   });
+  return consumerNumber
+    ? { ...transaction, billing_cycle_months: normalizeIntervalMonths(parsed.billing_cycle_months) }
+    : transaction;
 }

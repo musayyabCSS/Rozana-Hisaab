@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { ArrowDownLeft, ArrowUpRight, Check } from 'lucide-react';
 import { Modal } from '@/components/ui/Modal';
+import { DateInput } from '@/components/ui/DateInput';
 import type { Category, Language, NewTransaction, PaymentMethod, Transaction, TransactionType } from '@/types';
 import { EXPENSE_CATEGORIES, getCategoryDetails, getCategoryLabel, INCOME_CATEGORIES } from '@/lib/categories';
 import { tr } from '@/lib/i18n';
@@ -68,7 +69,7 @@ export function EditTransactionModal({ transaction, onClose, onSave, language, d
         <div><label className="text-slate-400 text-xs block mb-1.5">{tr('amount', language)} ({tr('pkr', language)})</label><input type="number" value={amount} onChange={(event) => setAmount(event.target.value)} className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-3 text-slate-100 text-lg font-bold focus:outline-none focus:border-emerald-500" /></div>
         <div><label className="text-slate-400 text-xs block mb-1.5">{tr('title', language)}</label><input type="text" value={title} onChange={(event) => setTitle(event.target.value)} className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2.5 text-slate-100 text-sm focus:outline-none focus:border-emerald-500" /></div>
         <div><label className="text-slate-400 text-xs block mb-1.5">{tr('category', language)}</label><div className="flex flex-wrap gap-2">{categories.map((cat) => <button key={cat} onClick={() => setCategory(cat)} className={`px-3 py-2 rounded-xl text-xs font-medium ${category === cat ? type === 'income' ? 'bg-emerald-500 text-white' : 'bg-rose-500 text-white' : 'bg-slate-800 text-slate-400'}`}>{getCategoryDetails(cat).emoji} {getCategoryLabel(cat, language)}</button>)}</div></div>
-        <div><label className="text-slate-400 text-xs block mb-1.5">{language === 'ur' ? 'تاریخ' : 'Date'}</label><input type="date" value={date} onChange={(event) => setDate(event.target.value)} className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2.5 text-slate-100 text-sm focus:outline-none focus:border-emerald-500" /></div>
+        <div><label className="text-slate-400 text-xs block mb-1.5">{language === 'ur' ? 'تاریخ' : 'Date'}</label><DateInput value={date} onChange={setDate} className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2.5 text-slate-100 text-sm focus:outline-none focus:border-emerald-500" /></div>
         <div><label className="text-slate-400 text-xs block mb-1.5">{tr('paymentMethod', language)}</label><div className="flex flex-wrap gap-2">{PAYMENT_METHODS.map((method) => <button key={method} onClick={() => setPaymentMethod(method === paymentMethod ? null : method)} className={`px-3 py-2 rounded-xl text-xs font-medium ${paymentMethod === method ? 'bg-slate-700 text-slate-100' : 'bg-slate-800/60 text-slate-500'}`}>{tr(method, language)}</button>)}</div></div>
       </div>
 

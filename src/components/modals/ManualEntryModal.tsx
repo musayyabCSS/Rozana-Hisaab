@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { ArrowDownLeft, ArrowUpRight } from 'lucide-react';
 import { Modal } from '@/components/ui/Modal';
+import { DateInput } from '@/components/ui/DateInput';
 import type { Language, TransactionType, Category, PaymentMethod, NewTransaction } from '@/types';
 import { tr } from '@/lib/i18n';
 import { getCategoryDetails, getCategoryLabel, EXPENSE_CATEGORIES, INCOME_CATEGORIES } from '@/lib/categories';
@@ -177,13 +178,11 @@ export function ManualEntryModal({ open, onClose, language, dir, initialDraft, o
         <label htmlFor="manual-transaction-date" className="text-slate-400 text-xs block mb-1.5">
           {language === 'ur' ? 'تاریخ' : 'Date'}
         </label>
-        <input
+        <DateInput
           id="manual-transaction-date"
-          type="date"
           value={date}
-          onChange={(event) => setDate(event.target.value)}
+          onChange={setDate}
           className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2.5 text-slate-100 text-sm focus:outline-none focus:border-emerald-500"
-          required
         />
       </div>
 

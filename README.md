@@ -20,7 +20,7 @@ Configure the required Supabase and VAPID values in the deployment environment. 
 
 ## Daily bill reminders
 
-GitHub Actions runs `.github/workflows/daily-reminders.yml` every day at **09:00 Pakistan Standard Time (PKT)** (04:00 UTC). It checks for unpaid transactions due that day and sends push reminders to registered subscriptions.
+GitHub Actions runs `.github/workflows/daily-reminders.yml` every day at **09:00 Pakistan Standard Time (PKT)** (04:00 UTC). It sends push reminders to registered subscriptions for unpaid transactions due that day, and for saved bill connections ("My Bills") whose next bill is expected that day (one billing cycle, usually a month, after the last issue date). On Android, the app schedules the same expected-bill reminders as local notifications while daily reminders are switched on.
 
 Add these repository Actions secrets to enable scheduled reminders:
 

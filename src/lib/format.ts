@@ -31,12 +31,13 @@ function parseDate(dateStr: string): Date {
     : new Date(dateStr);
 }
 
-export function formatDate(dateStr: string, lang: 'en' | 'ur'): string {
+// The app shows every date as dd/mm/yyyy, in both languages and on every device.
+export function formatDate(dateStr: string): string {
+  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(dateStr);
+  if (match) return `${match[3]}/${match[2]}/${match[1]}`;
   const date = parseDate(dateStr);
-  if (lang === 'ur') {
-    return date.toLocaleDateString('ur-PK', { day: 'numeric', month: 'long', year: 'numeric' });
-  }
-  return date.toLocaleDateString('en-PK', { day: 'numeric', month: 'short', year: 'numeric' });
+  if (Number.isNaN(date.getTime())) return dateStr;
+  return formatDate(getLocalDateKey(date));
 }
 
 export function getRelativeDate(dateStr: string, lang: 'en' | 'ur'): string {
@@ -53,7 +54,7 @@ export function getRelativeDate(dateStr: string, lang: 'en' | 'ur'): string {
     if (diffDays > 1) return `${diffDays} دن بعد`;
     if (diffDays === -1) return 'گزشتہ کل';
     if (diffDays > -7) return `${Math.abs(diffDays)} دن پہلے`;
-    return date.toLocaleDateString('ur-PK', { day: 'numeric', month: 'short' });
+    return formatDate(dateStr);
   }
 
   if (diffDays === 0) return 'Today';
@@ -61,7 +62,7 @@ export function getRelativeDate(dateStr: string, lang: 'en' | 'ur'): string {
   if (diffDays > 1) return `In ${diffDays} days`;
   if (diffDays === -1) return 'Yesterday';
   if (diffDays > -7) return `${Math.abs(diffDays)} days ago`;
-  return date.toLocaleDateString('en-PK', { day: 'numeric', month: 'short' });
+  return formatDate(dateStr);
 }
 
 export function isFutureDate(dateStr: string): boolean {

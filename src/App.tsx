@@ -16,20 +16,26 @@ import { BankStatementModal } from '@/components/modals/BankStatementModal';
 import { ExportModal } from '@/components/modals/ExportModal';
 import { EditTransactionModal } from '@/components/modals/EditTransactionModal';
 import { SetNewPasswordModal } from '@/components/modals/SetNewPasswordModal';
-import { TransactionReviewModal } from '@/components/modals/TransactionReviewModal';
+import { TransactionReviewModal, type ConnectionSaveOptions } from '@/components/modals/TransactionReviewModal';
 import { PrivacyConsentModal } from '@/components/modals/PrivacyConsentModal';
 import { SettingsModal } from '@/components/modals/SettingsModal';
+import { UpcomingModal } from '@/components/modals/UpcomingModal';
+import { BillsModal } from '@/components/modals/BillsModal';
+import { ImportExportModal } from '@/components/modals/ImportExportModal';
+import { UpcomingStrip } from '@/components/UpcomingStrip';
+import { countBillsNeedingAttention, getBills, getPendingItems, getUpcomingItems } from '@/lib/upcoming';
 import { Modal } from '@/components/ui/Modal';
 import { useLanguage } from '@/hooks/useLanguage';
 import { useTransactions } from '@/hooks/useTransactions';
 import { useProfile } from '@/hooks/useProfile';
+import { useBillConnections } from '@/hooks/useBillConnections';
 import { getMonthStats } from '@/lib/format';
 import { deleteAllReceiptImages, saveReceiptBlob } from '@/lib/receiptStorage';
 import { processReceiptBlob, processVoiceBlob, type MediaReviewDraft } from '@/lib/mediaProcessing';
 import { clearLegacyPendingMedia } from '@/lib/localStore';
 import type { NewTransaction, Transaction } from '@/types';
 
-type ModalType = 'voice' | 'scan' | 'add' | 'bank' | 'export' | 'settings' | null;
+type ModalType = 'voice' | 'scan' | 'add' | 'bank' | 'export' | 'importExport' | 'upcoming' | 'bills' | 'settings' | null;
 
 const REFRESH_THRESHOLD = 65;
 const MAX_PULL_DISTANCE = 80;
@@ -75,6 +81,7 @@ function App() {
     uploadAvatar,
     syncProfile,
   } = useProfile(session?.user.id);
+  const billConnections = useBillConnections(session?.user.id, language);
   const [activeModal, setActiveModal] = useState<ModalType>(null);
   const [captureConsentOpen, setCaptureConsentOpen] = useState(false);
   const [captureRequested, setCaptureRequested] = useState<'voice' | 'scan' | null>(null);
@@ -132,7 +139,11 @@ function App() {
     setCaptureRequested(null);
   };
 
-  const handleMediaSave = async (media: MediaReviewDraft, draft: Transaction): Promise<boolean> => {
+  const handleMediaSave = async (
+    media: MediaReviewDraft,
+    draft: Transaction,
+    connection: ConnectionSaveOptions | null,
+  ): Promise<boolean> => {
     const transaction = await addTransaction({
       id: draft.id,
       type: draft.type,
@@ -147,10 +158,24 @@ function App() {
       transaction_date: draft.transaction_date,
       has_receipt: media.type === 'receipt',
       is_paid: draft.is_paid,
+      consumer_number: draft.consumer_number,
+      issue_date: draft.issue_date,
     });
     if (!transaction) return false;
     if (media.type === 'receipt') {
       await saveReceiptBlob(transaction.id, media.blob);
+    }
+    if (connection && draft.consumer_number) {
+      // The transaction is already saved; a failed connection update (e.g. offline)
+      // only means the bill isn't linked yet and is offered again on the next scan.
+      await billConnections.saveFromBill({
+        consumerNumber: draft.consumer_number,
+        provider: draft.title,
+        nickname: connection.nickname,
+        issueDate: draft.issue_date,
+        amount: draft.amount,
+        intervalMonths: draft.billing_cycle_months,
+      });
     }
     return true;
   };
@@ -196,6 +221,10 @@ function App() {
 
   const now = new Date();
   const stats = getMonthStats(transactions, now.getFullYear(), now.getMonth());
+  const pendingItems = getPendingItems(transactions, billConnections.connections);
+  const upcomingItems = getUpcomingItems(transactions, billConnections.connections);
+  const bills = getBills(transactions, billConnections.connections);
+  const billsNeedingAttention = countBillsNeedingAttention(transactions, billConnections.connections);
 
   const isAtTop = (target: EventTarget | null) => {
     if (window.scrollY !== 0 || (document.scrollingElement?.scrollTop ?? 0) !== 0) {
@@ -585,7 +614,7 @@ function App() {
         onAvatarChange={async (file) => {
           await uploadAvatar(file);
         }}
-        onImportBank={() => setActiveModal('bank')}
+        onImportExport={() => setActiveModal('importExport')}
         onOpenSettings={() => setActiveModal('settings')}
         onLogout={handleLogout}
       />
@@ -624,6 +653,12 @@ function App() {
           language={language}
           dir={dir}
         />
+        <UpcomingStrip
+          items={upcomingItems}
+          language={language}
+          dir={dir}
+          onOpen={() => setActiveModal('upcoming')}
+        />
         <TransactionFeed
           transactions={transactions}
           language={language}
@@ -648,7 +683,8 @@ function App() {
           setManualDraft(null);
           setActiveModal('add');
         }}
-        onExport={() => setActiveModal('export')}
+        onBills={() => setActiveModal('bills')}
+        billsBadge={billsNeedingAttention}
       />
 
       {/* Modals */}
@@ -699,6 +735,42 @@ function App() {
         onImport={handleBankImport}
       />
 
+      <ImportExportModal
+        open={activeModal === 'importExport'}
+        onClose={() => setActiveModal(null)}
+        language={language}
+        dir={dir}
+        onImport={() => setActiveModal('bank')}
+        onExport={() => setActiveModal('export')}
+      />
+
+      <UpcomingModal
+        open={activeModal === 'upcoming'}
+        onClose={() => setActiveModal(null)}
+        language={language}
+        dir={dir}
+        pendingItems={pendingItems}
+        onConfirm={handleUpdate}
+      />
+
+      <BillsModal
+        open={activeModal === 'bills'}
+        onClose={() => setActiveModal(null)}
+        language={language}
+        dir={dir}
+        unpaidBills={bills.unpaid}
+        paidBills={bills.paid}
+        connections={billConnections.connections}
+        onConfirm={handleUpdate}
+        onRenameConnection={billConnections.rename}
+        onSetInterval={billConnections.setBillingInterval}
+        onDeleteConnection={billConnections.remove}
+        onScanBill={() => {
+          setActiveModal(null);
+          requestCapture('scan');
+        }}
+      />
+
       <ExportModal
         open={activeModal === 'export'}
         onClose={() => setActiveModal(null)}
@@ -737,9 +809,10 @@ function App() {
         media={reviewMedia}
         language={language}
         dir={dir}
+        connections={billConnections.connections}
         onDiscard={() => setReviewMedia(null)}
-        onSave={async (media, transaction) => {
-          const saved = await handleMediaSave(media, transaction);
+        onSave={async (media, transaction, connection) => {
+          const saved = await handleMediaSave(media, transaction, connection);
           if (saved) setReviewMedia(null);
           return saved;
         }}

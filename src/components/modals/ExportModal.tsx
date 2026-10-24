@@ -4,9 +4,10 @@ import { Capacitor } from '@capacitor/core';
 import { Directory, Filesystem } from '@capacitor/filesystem';
 import { Share } from '@capacitor/share';
 import { Modal } from '@/components/ui/Modal';
+import { DateInput } from '@/components/ui/DateInput';
 import type { Language, Transaction } from '@/types';
 import { tr } from '@/lib/i18n';
-import { formatPKR, getLocalDateKey } from '@/lib/format';
+import { formatDate, formatPKR, getLocalDateKey } from '@/lib/format';
 import { getCategoryLabel } from '@/lib/categories';
 
 interface ExportModalProps {
@@ -58,7 +59,7 @@ async function writeAndShareNativeFile(content: string, filename: string, mime: 
 function buildCSV(txns: Transaction[], lang: Language): string {
   const headers = ['Date', 'Type', 'Category', 'Title', 'Amount (PKR)', 'Payment Method', 'Source'];
   const rows = txns.map((t) => [
-    t.transaction_date,
+    formatDate(t.transaction_date),
     t.type,
     getCategoryLabel(t.category, lang),
     `"${t.title.replace(/"/g, '""')}"`,
@@ -73,7 +74,7 @@ function buildExcelHTML(txns: Transaction[], lang: Language, income: number, exp
   const rows = txns
     .map(
       (t) => `<tr>
-      <td>${t.transaction_date}</td>
+      <td>${formatDate(t.transaction_date)}</td>
       <td>${t.type}</td>
       <td>${getCategoryLabel(t.category, lang)}</td>
       <td>${t.title.replace(/</g, '&lt;')}</td>
@@ -103,7 +104,7 @@ function buildPrintableHTML(txns: Transaction[], lang: Language, income: number,
   const rows = txns
     .map(
       (t) => `<tr>
-        <td style="padding:8px 12px;border-bottom:1px solid #eee">${t.transaction_date}</td>
+        <td style="padding:8px 12px;border-bottom:1px solid #eee">${formatDate(t.transaction_date)}</td>
         <td style="padding:8px 12px;border-bottom:1px solid #eee">${t.type}</td>
         <td style="padding:8px 12px;border-bottom:1px solid #eee">${getCategoryLabel(t.category, lang)}</td>
         <td style="padding:8px 12px;border-bottom:1px solid #eee">${t.title.replace(/</g, '&lt;')}</td>
@@ -145,7 +146,7 @@ function buildPrintableHTML(txns: Transaction[], lang: Language, income: number,
     <button class="print-btn" onclick="window.print()">🖨️ Print / Save as PDF</button>
   </div>
   <h1>Rozana Hisaab</h1>
-  <p class="subtitle">Transaction Report &bull; Generated ${new Date().toLocaleDateString('en-PK')}</p>
+  <p class="subtitle">Transaction Report &bull; Generated ${formatDate(getLocalDateKey())}</p>
   <div class="summary">
     <div class="income"><div class="label">Total Income</div><div class="value">PKR ${formatPKR(income)}</div></div>
     <div class="expense"><div class="label">Total Expenses</div><div class="value">PKR ${formatPKR(expenses)}</div></div>
@@ -316,19 +317,19 @@ export function ExportModal({ open, onClose, language, dir, transactions }: Expo
         <div className="grid grid-cols-2 gap-3 mb-4">
           <div>
             <label className="text-slate-400 text-xs block mb-1">{tr('startDate', language)}</label>
-            <input
-              type="date"
+            <DateInput
+              aria-label={tr('startDate', language)}
               value={startDate}
-              onChange={(e) => setStartDate(e.target.value)}
+              onChange={setStartDate}
               className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-slate-100 text-sm focus:outline-none focus:border-emerald-500"
             />
           </div>
           <div>
             <label className="text-slate-400 text-xs block mb-1">{tr('endDate', language)}</label>
-            <input
-              type="date"
+            <DateInput
+              aria-label={tr('endDate', language)}
               value={endDate}
-              onChange={(e) => setEndDate(e.target.value)}
+              onChange={setEndDate}
               className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-slate-100 text-sm focus:outline-none focus:border-emerald-500"
             />
           </div>

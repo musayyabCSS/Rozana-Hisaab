@@ -14,6 +14,9 @@ export interface ScannedReceipt {
   amount?: number | string;
   date?: string;
   transaction_date?: string;
+  issue_date?: string;
+  consumer_number?: string;
+  billing_cycle_months?: number;
   due_date?: string;
   is_paid?: boolean;
   units_consumed?: string;

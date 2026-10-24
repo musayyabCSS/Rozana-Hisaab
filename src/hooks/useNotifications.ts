@@ -2,9 +2,10 @@ import { useCallback, useEffect, useState } from 'react';
 import { Capacitor } from '@capacitor/core';
 import { LocalNotifications } from '@capacitor/local-notifications';
 import { supabase } from '@/lib/supabase';
+import { cancelNativeBillReminders } from '@/lib/billReminders';
 import type { Language } from '@/types';
 
-const DAILY_REMINDER_ID = 21337;
+export const DAILY_REMINDER_ID = 21337;
 
 type NotificationError =
   | 'notificationPermissionDenied'
@@ -158,6 +159,7 @@ export function useNotifications(userId?: string, language: Language = 'en') {
         await LocalNotifications.cancel({
           notifications: [{ id: DAILY_REMINDER_ID }],
         });
+        await cancelNativeBillReminders();
         setEnabled(false);
         return;
       }

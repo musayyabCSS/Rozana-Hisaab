@@ -246,17 +246,19 @@ Return strictly valid JSON with this exact schema:
               {
                 type: "text",
                 text: `Analyze this receipt or bill image. Return a JSON object with these exact keys:
-- title: for an incoming payment from an individual/client, use the person's/client's name (not generic text such as "Payment Received"). For a utility bill, use the provider name (such as LESCO or PTCL). For a bank, credit card, or loan statement, use the bank and product name (such as "HBL ReadyCash" or "Meezan Credit Card"). Never use the name of the customer or account holder the document is addressed to. Otherwise use a concise transaction title.
-- amount: numeric amount in PKR, or 0 if not found
+- title: for an incoming payment from an individual/client, use the person's/client's name (not generic text such as "Payment Received"). For a utility bill, use the provider's common short name (such as LESCO, SNGPL, PTCL, WASA, K-Electric, StormFiber), not the full legal name. For a bank, credit card, or loan statement, use the bank and product name (such as "HBL ReadyCash" or "Meezan Credit Card"). Never use the name of the customer or account holder the document is addressed to. Otherwise use a concise transaction title.
+- amount: numeric amount in PKR, or 0 if not found. For bills, use the amount payable within the due date (the lower amount), never the amount payable after the due date
 - type: use "income" when money is received, deposited, or paid to a person/client; otherwise "expense"
 - category: for vehicle maintenance, car repair, parts, labour, periodic maintenance, workshop, or mechanic invoices, strictly use "mechanic". For credit card, running finance (such as ReadyCash), personal loan, or installment statements, use type "expense" and category "udhaar" (loan repayment), with amount set to the minimum amount due if shown, otherwise the total amount due. For taxi, bus, or train fares, use "transport". For restaurant, cafe, takeaway, or food delivery receipts (prepared meals), use "food"; supermarket and kirana receipts stay "groceries". For incoming client payments use "freelance". For petty cash vouchers or funds issued by an office/employer for office supplies or equipment, use type "income" and category "office_funds". For other transactions, choose exactly one of "salary", "business", "rental_income", "commission", "loan", "scholarship", "office_funds", "transport", "fuel", "bills", "groceries", "food", "medical", "udhaar", "rent", "school_fee", or "misc_expense".
 - vendor: for incoming payments, extract the client's/person's name (not generic labels); for expenses, extract the merchant name; or empty string if not visible
 - provider: service/provider name, or empty string
 - transaction_date: the printed or stamped invoice/receipt date in YYYY-MM-DD format (for example, "2026-08-09"). Never omit this if a date appears on the paper. Convert dates such as "09-AUG-2026" to "2026-08-09".
 - due_date: only for utility bills, credit card/loan statements, or other scheduled bills with an explicit due date (such as "Due Date: 20th May 2026"), in YYYY-MM-DD format; otherwise use an empty string
+- issue_date: only for utility bills and statements, the printed issue/bill date (such as "ISSUE DATE 02 OCT 26") in YYYY-MM-DD format; otherwise an empty string
 - is_paid: true if the document shows the payment is already completed (a shop/sale receipt, cash memo, payment confirmation, transfer receipt, or a PAID stamp); false if it is a bill, invoice, or statement still awaiting payment
 - units_consumed: quantity/units shown, or empty string
-- consumer_number: account/consumer reference if shown, or empty string
+- consumer_number: for utility bills and statements, the account's permanent identifier exactly as printed. Always pick the same field for a given provider so monthly bills match: electricity companies (LESCO, K-Electric, IESCO, FESCO, GEPCO, MEPCO, PESCO and other DISCOs): the "REFERENCE NO", usually 14 digits printed in groups and often ending in a letter such as U or R, e.g. "44 11564 8318413U" (not the Consumer ID, and never the METER NO or bill number); SNGPL/SSGC gas: the "Consumer No"; WASA and other water/sewerage bills: the account number labelled "Account#", "Account No", or "A/C No." (for WASA Lahore usually 8 digits, e.g. "08453127"), not the property, NCR, ward, or bill-area number; PTCL: the "Account ID" or "Account ID/ESN" (not the phone number, invoice number, or Customer ID); fiber/internet providers (StormFiber, Nayatel, Transworld and others): the customer or account ID; housing societies and cantonment boards: the property, plot, or consumer number used for billing; bank statements: the repayment/loan account number (never a full card number; keep any masking as printed). Never a meter number, bill number, invoice number, transaction ID, a tax/registration number (STN, NTN, GST, CNIC), or a payment code (1Link/1Bill prefix or reference code, PSID, Kuickpay or barcode number), even if it is printed large, highlighted, or near the provider's name. Copy the digits exactly; if you cannot read the labelled field clearly, return an empty string rather than guessing
+- billing_cycle_months: how many months one bill covers, if the bill states it (count the months in the billing month/period: 2 for a bi-monthly bill or "Jan-Feb", 3 for a quarterly bill or "July, August, September"); otherwise 1
 - description: brief summary of the receipt`
               },
               {
@@ -264,7 +266,9 @@ Return strictly valid JSON with this exact schema:
                 image_url: {
                   url: body.imageBase64.startsWith("data:")
                     ? body.imageBase64
-                    : `data:image/jpeg;base64,${body.imageBase64}`
+                    : `data:image/jpeg;base64,${body.imageBase64}`,
+                  // Bills have small printed reference numbers; read them at full resolution.
+                  detail: "high",
                 }
               }
             ]

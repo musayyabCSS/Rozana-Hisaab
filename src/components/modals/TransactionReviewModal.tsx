@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react';
 import { ArrowDownLeft, ArrowUpRight, Check } from 'lucide-react';
 import { Modal } from '@/components/ui/Modal';
+import { DateInput } from '@/components/ui/DateInput';
 import { formatDate, formatPKR } from '@/lib/format';
 import { tr } from '@/lib/i18n';
-import type { Category, Language, Transaction, TransactionType } from '@/types';
+import type { BillConnection, Category, Language, Transaction, TransactionType } from '@/types';
+import { findBillConnection, getConnectionLabel, normalizeConsumerNumber } from '@/lib/billConnections';
 import { EXPENSE_CATEGORIES, getCategoryDetails, getCategoryLabel, INCOME_CATEGORIES } from '@/lib/categories';
 import type { MediaReviewDraft } from '@/lib/mediaProcessing';
 
@@ -21,18 +23,29 @@ function createReviewDraft(transaction: Transaction | undefined): Transaction | 
   return { ...transaction, category: safeCategory };
 }
 
+// Present when the bill should be linked to a saved connection (new or existing).
+export interface ConnectionSaveOptions {
+  nickname: string | null;
+}
+
 interface TransactionReviewModalProps {
   media: MediaReviewDraft | null;
   language: Language;
   dir: 'ltr' | 'rtl';
+  connections: BillConnection[];
   onDiscard: (id: string) => void;
-  onSave: (media: MediaReviewDraft, transaction: Transaction) => Promise<boolean>;
+  onSave: (
+    media: MediaReviewDraft,
+    transaction: Transaction,
+    connection: ConnectionSaveOptions | null,
+  ) => Promise<boolean>;
 }
 
 export function TransactionReviewModal({
   media,
   language,
   dir,
+  connections,
   onDiscard,
   onSave,
 }: TransactionReviewModalProps) {
@@ -42,11 +55,15 @@ export function TransactionReviewModal({
   const [draft, setDraft] = useState<Transaction | null>(() => createReviewDraft(transaction));
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [trackConnection, setTrackConnection] = useState(true);
+  const [connectionNickname, setConnectionNickname] = useState('');
 
   useEffect(() => {
     setDraft(createReviewDraft(transaction));
     setSaving(false);
     setSaveError(null);
+    setTrackConnection(true);
+    setConnectionNickname('');
   }, [media?.id, transaction]);
 
   useEffect(() => {
@@ -73,12 +90,25 @@ export function TransactionReviewModal({
     });
   };
 
+  // Bills and statements carry a consumer/reference number that links them to a saved connection.
+  const showConsumerNumber =
+    draft?.type === 'expense' &&
+    (Boolean(draft.consumer_number) || draft.category === 'bills' || draft.category === 'udhaar');
+  const linkedConnection = findBillConnection(connections, draft?.consumer_number);
+
   const saveTransaction = async () => {
     if (!media || !draft || saving) return;
     setSaving(true);
     setSaveError(null);
     try {
-      const saved = await onSave(media, draft);
+      const consumerNumber = draft.type === 'expense' ? normalizeConsumerNumber(draft.consumer_number) : null;
+      const saved = await onSave(
+        media,
+        { ...draft, consumer_number: consumerNumber },
+        consumerNumber && (linkedConnection || trackConnection)
+          ? { nickname: linkedConnection ? null : connectionNickname }
+          : null,
+      );
       if (!saved) setSaveError(isUrdu ? 'لین دین محفوظ نہیں ہو سکا۔ دوبارہ کوشش کریں۔' : 'Could not save the transaction. Please try again.');
     } catch (error) {
       console.error('Could not confirm the reviewed transaction:', error);
@@ -177,18 +207,61 @@ export function TransactionReviewModal({
             </div>
             <div>
               <label htmlFor="review-transaction-date" className="mb-1.5 block text-xs text-slate-400">{isUrdu ? 'تاریخ' : 'Date'}</label>
-              <input
+              <DateInput
                 id="review-transaction-date"
-                type="date"
                 value={draft.transaction_date}
-                onChange={(event) => setDraft({ ...draft, transaction_date: event.target.value })}
+                onChange={(value) => setDraft({ ...draft, transaction_date: value })}
                 className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm text-slate-100 focus:border-emerald-500 focus:outline-none"
               />
             </div>
             {draft.is_paid === false && draft.due_date && (
               <p role="status" className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2.5 text-xs text-amber-300">
-                {tr('reviewUnpaidBill', language).replace('{date}', formatDate(draft.due_date, language))}
+                {tr('reviewUnpaidBill', language).replace('{date}', formatDate(draft.due_date))}
               </p>
+            )}
+            {showConsumerNumber && (
+              <div className="space-y-2 rounded-xl border border-slate-800 bg-slate-950/40 p-3">
+                <label htmlFor="review-consumer-number" className="block text-xs text-slate-400">
+                  {tr('billConsumerNumber', language)}
+                </label>
+                <input
+                  id="review-consumer-number"
+                  type="text"
+                  inputMode="text"
+                  autoCapitalize="characters"
+                  value={draft.consumer_number ?? ''}
+                  onChange={(event) => setDraft({ ...draft, consumer_number: event.target.value })}
+                  className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm tracking-wide text-slate-100 focus:border-emerald-500 focus:outline-none"
+                  dir="ltr"
+                />
+                {linkedConnection ? (
+                  <p className="text-xs text-emerald-300">
+                    {tr('billLinkedTo', language).replace('{name}', getConnectionLabel(linkedConnection))}
+                  </p>
+                ) : normalizeConsumerNumber(draft.consumer_number) ? (
+                  <>
+                    <label className="flex items-center gap-2 text-xs text-slate-300">
+                      <input
+                        type="checkbox"
+                        checked={trackConnection}
+                        onChange={(event) => setTrackConnection(event.target.checked)}
+                        className="h-4 w-4 accent-emerald-500"
+                      />
+                      {tr('billTrackConnection', language)}
+                    </label>
+                    {trackConnection && (
+                      <input
+                        type="text"
+                        value={connectionNickname}
+                        onChange={(event) => setConnectionNickname(event.target.value)}
+                        placeholder={tr('billNicknamePlaceholder', language).replace('{provider}', draft.title || 'LESCO')}
+                        aria-label={tr('billNickname', language)}
+                        className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm text-slate-100 focus:border-emerald-500 focus:outline-none"
+                      />
+                    )}
+                  </>
+                ) : null}
+              </div>
             )}
           </div>
           {saveError && <p role="alert" className="text-sm text-rose-300">{saveError}</p>}

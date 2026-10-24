@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react';
-import { Camera, FileUp, LogOut, Settings } from 'lucide-react';
+import { Camera, LogOut, Settings } from 'lucide-react';
 import { LanguageIcon } from '@/components/ui/LanguageIcon';
+import { FileTransferIcon } from '@/components/ui/FileTransferIcon';
 import type { Language } from '@/types';
 import { tr } from '@/lib/i18n';
 import type { UserProfile } from '@/hooks/useProfile';
@@ -13,7 +14,7 @@ interface HeaderProps {
   profile: UserProfile | null;
   userMetadata?: Record<string, unknown>;
   onAvatarChange: (file: File) => Promise<void>;
-  onImportBank: () => void;
+  onImportExport: () => void;
   onOpenSettings: () => void;
   onLogout: () => void;
 }
@@ -34,7 +35,7 @@ export function Header({
   profile,
   userMetadata,
   onAvatarChange,
-  onImportBank,
+  onImportExport,
   onOpenSettings,
   onLogout,
 }: HeaderProps) {
@@ -123,14 +124,14 @@ export function Header({
         </div>
 
         <div className={`flex shrink-0 items-center gap-1.5 ${dir === 'rtl' ? 'flex-row-reverse' : ''}`}>
-          {/* Import Bank Button */}
+          {/* Import / Export Button */}
           <button
-            onClick={onImportBank}
+            onClick={onImportExport}
             className="flex items-center justify-center h-9 w-9 sm:w-auto sm:px-3 sm:py-2 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 transition-all active:scale-95 text-emerald-400"
-            aria-label={tr('bankTitle', language)}
+            aria-label={tr('importExport', language)}
           >
-            <FileUp size={18} />
-            <span className="text-xs font-semibold hidden sm:inline sm:ms-1.5">{tr('importBank', language)}</span>
+            <FileTransferIcon size={18} />
+            <span className="text-xs font-semibold hidden sm:inline sm:ms-1.5">{tr('importExport', language)}</span>
           </button>
 
           {/* Language Toggle */}
